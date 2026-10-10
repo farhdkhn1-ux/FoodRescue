@@ -1,25 +1,40 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 /**
- * Halaman Register Food Rescue.
+ * Komponen Form Register Food Rescue.
  *
  * Field: Nama lengkap, Email, Password, Konfirmasi password.
+ * Mendukung pembacaan parameter query ?role=seller atau ?role=buyer dengan validasi ketat.
  * Role default: buyer (ditetapkan oleh trigger handle_new_user di database).
  * Tidak ada opsi untuk memilih admin/courier di form publik.
  */
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Membaca parameter query ?role=seller atau ?role=buyer secara aman
+  const queryRole = searchParams.get("role")?.toLowerCase();
+  const initialRole: "buyer" | "seller" = queryRole === "seller" ? "seller" : "buyer";
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState<"buyer" | "seller">("buyer");
+  const [role, setRole] = useState<"buyer" | "seller">(initialRole);
+
+  // Sinkronisasi jika parameter query di URL berubah
+  useEffect(() => {
+    if (queryRole === "seller") {
+      setRole("seller");
+    } else if (queryRole === "buyer") {
+      setRole("buyer");
+    }
+  }, [queryRole]);
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -333,5 +348,25 @@ export default function RegisterPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+/**
+ * Halaman Register Food Rescue.
+ * Dibungkus dengan Suspense boundary karena RegisterForm menggunakan useSearchParams().
+ */
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex flex-1 items-center justify-center px-4 py-12">
+          <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <p className="text-sm text-gray-500">Memuat halaman pendaftaran...</p>
+          </div>
+        </main>
+      }
+    >
+      <RegisterForm />
+    </Suspense>
   );
 }
