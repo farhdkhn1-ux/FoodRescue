@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import type { User } from "@supabase/supabase-js";
 
 // Tipe data untuk tabel foods (sementara, nanti akan dipindah ke file types)
 interface Food {
@@ -17,6 +18,10 @@ export default function Home() {
   const [foods, setFoods] = useState<Food[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Status autentikasi sesi pengguna aktual
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   async function fetchFoods() {
     setLoading(true);
@@ -40,9 +45,49 @@ export default function Home() {
 
   useEffect(() => {
     let isMounted = true;
+    const supabase = createClient();
+
+    // 1. Verifikasi status autentikasi pengguna secara aman melalui Supabase Auth
+    async function checkAuthStatus() {
+      try {
+        const {
+          data: { user: currentUser },
+          error: authError,
+        } = await supabase.auth.getUser();
+
+        if (!isMounted) return;
+
+        if (authError || !currentUser) {
+          setUser(null);
+        } else {
+          setUser(currentUser);
+        }
+      } catch {
+        if (isMounted) setUser(null);
+      } finally {
+        if (isMounted) setAuthLoading(false);
+      }
+    }
+
+    checkAuthStatus();
+
+    // 2. Sinkronisasi sesi secara realtime saat login, logout, atau perubahan token
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
+
+      if (session?.user) {
+        setUser(session.user);
+      } else {
+        setUser(null);
+      }
+      setAuthLoading(false);
+    });
+
+    // 3. Muat data katalog makanan
     async function loadInitial() {
       try {
-        const supabase = createClient();
         const { data, error } = await supabase.from("foods").select("*");
 
         if (!isMounted) return;
@@ -62,6 +107,7 @@ export default function Home() {
     loadInitial();
     return () => {
       isMounted = false;
+      subscription.unsubscribe();
     };
   }, []);
 
@@ -112,12 +158,14 @@ export default function Home() {
               >
                 Jelajahi Makanan Tersedia
               </a>
-              <Link
-                href="/register"
-                className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 shadow-2xs transition-colors hover:border-emerald-300 hover:bg-slate-50 hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-emerald-400"
-              >
-                Daftar Sebagai Pembeli
-              </Link>
+              {!authLoading && !user && (
+                <Link
+                  href="/register"
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 shadow-2xs transition-colors hover:border-emerald-300 hover:bg-slate-50 hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-emerald-400"
+                >
+                  Daftar Sebagai Pembeli
+                </Link>
+              )}
             </div>
           </div>
         </div>

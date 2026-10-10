@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { getSafeInternalRedirect } from "@/lib/auth/redirect";
 
 /**
  * Proxy (pengganti middleware di Next.js 16).
@@ -50,7 +51,48 @@ export async function proxy(request: NextRequest) {
   // PENTING: Jangan menghapus baris ini!
   // getUser() memicu refresh token jika token hampir kedaluwarsa.
   // Tanpa ini, sesi user bisa tiba-tiba hilang.
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const pathname = request.nextUrl.pathname;
+  const normalizedPathname = pathname.toLowerCase();
+
+  // Daftar rute privat yang mewajibkan autentikasi pengguna
+  const protectedPrefixes = ["/admin", "/seller", "/buyer", "/courier"];
+  const isProtectedPath = protectedPrefixes.some(
+    (prefix) =>
+      normalizedPathname === prefix ||
+      normalizedPathname.startsWith(`${prefix}/`)
+  );
+
+  // 1. Jika rute privat dan pengguna belum login -> alihkan ke /login dengan redirect param
+  if (isProtectedPath && !user) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("redirect", pathname);
+    const redirectResponse = NextResponse.redirect(loginUrl);
+    // Salin cookie sesi yang baru diperbarui ke response pengalihan
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, cookie);
+    });
+    return redirectResponse;
+  }
+
+  // 2. Jika pengguna sudah login dan membuka /login atau /register -> alihkan agar tidak login ulang
+  const isAuthPage =
+    normalizedPathname === "/login" || normalizedPathname === "/register";
+  if (user && isAuthPage) {
+    const rawRedirect = request.nextUrl.searchParams.get("redirect");
+    // Gunakan helper sanitasi yang menolak URL eksternal, scheme berbahaya, dan loop kembali ke login/register
+    const safeTarget = getSafeInternalRedirect(rawRedirect, "/", true);
+    const redirectResponse = NextResponse.redirect(
+      new URL(safeTarget, request.url)
+    );
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, cookie);
+    });
+    return redirectResponse;
+  }
 
   return supabaseResponse;
 }

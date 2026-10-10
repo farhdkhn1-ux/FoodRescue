@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { isValidRole } from "@/lib/auth/roles";
 import type { User } from "@supabase/supabase-js";
 
 /**
@@ -22,6 +23,7 @@ export default function Navbar() {
   const pathname = usePathname();
 
   const [user, setUser] = useState<User | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
@@ -31,6 +33,29 @@ export default function Navbar() {
   useEffect(() => {
     let isMounted = true;
     const supabase = createClient();
+
+    async function fetchUserRole(userId: string): Promise<string | null> {
+      try {
+        const { data: roleRpc, error: rpcError } =
+          await supabase.rpc("get_my_role");
+        if (!rpcError && isValidRole(roleRpc)) {
+          return roleRpc;
+        }
+
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select("role")
+          .eq("id", userId)
+          .maybeSingle();
+
+        if (!userError && isValidRole(userData?.role)) {
+          return userData.role;
+        }
+      } catch {
+        // Jangan memberikan role default unverified jika query gagal
+      }
+      return null;
+    }
 
     async function initializeUser() {
       try {
@@ -43,11 +68,17 @@ export default function Navbar() {
 
         if (error || !currentUser) {
           setUser(null);
+          setUserRole(null);
         } else {
           setUser(currentUser);
+          const role = await fetchUserRole(currentUser.id);
+          if (isMounted) setUserRole(role);
         }
       } catch {
-        if (isMounted) setUser(null);
+        if (isMounted) {
+          setUser(null);
+          setUserRole(null);
+        }
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -58,13 +89,16 @@ export default function Navbar() {
     // Listener realtime untuk update sesi auth
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
 
       if (event === "SIGNED_OUT" || !session) {
         setUser(null);
+        setUserRole(null);
       } else if (session?.user) {
         setUser(session.user);
+        const role = await fetchUserRole(session.user.id);
+        if (isMounted) setUserRole(role);
       }
       setLoading(false);
     });
@@ -125,6 +159,7 @@ export default function Navbar() {
       }
 
       setUser(null);
+      setUserRole(null);
       setMobileMenuOpen(false);
 
       // Arahkan ke halaman login dan refresh sesi SSR
@@ -137,8 +172,25 @@ export default function Navbar() {
     }
   }
 
+  function getRoleLink(role: string | null): { href: string; label: string } | null {
+    if (!role) return null;
+    switch (role.toLowerCase()) {
+      case "admin":
+        return { href: "/admin", label: "Area Admin" };
+      case "seller":
+        return { href: "/seller", label: "Area Seller" };
+      case "buyer":
+        return { href: "/buyer", label: "Area Buyer" };
+      case "courier":
+        return { href: "/courier", label: "Area Kurir" };
+      default:
+        return null;
+    }
+  }
+
   const displayName = getDisplayName(user);
   const initials = getInitials(displayName);
+  const roleLink = getRoleLink(userRole);
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200/80 bg-white/90 backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-900/90 transition-colors">
@@ -176,7 +228,7 @@ export default function Navbar() {
         </Link>
 
         {/* Navigasi Desktop */}
-        <nav className="hidden md:flex md:items-center md:gap-7" aria-label="Navigasi Utama">
+        <nav className="hidden md:flex md:items-center md:gap-6" aria-label="Navigasi Utama">
           <Link
             href="/"
             className={`text-sm font-medium transition-colors hover:text-emerald-600 dark:hover:text-emerald-400 ${
@@ -193,6 +245,19 @@ export default function Navbar() {
           >
             Jelajahi Makanan
           </Link>
+          {roleLink && (
+            <Link
+              href={roleLink.href}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+                pathname === roleLink.href
+                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 ring-1 ring-emerald-500/40"
+                  : "bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              }`}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <span>{roleLink.label}</span>
+            </Link>
+          )}
         </nav>
 
         {/* Bagian Aksi Autentikasi Desktop */}
@@ -218,8 +283,8 @@ export default function Navbar() {
                   <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 max-w-[140px] truncate">
                     {displayName}
                   </span>
-                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 -mt-0.5">
-                    Aktif
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 capitalize -mt-0.5">
+                    {userRole ? `Role: ${userRole}` : "Aktif"}
                   </span>
                 </div>
               </div>
@@ -413,6 +478,33 @@ export default function Navbar() {
               </svg>
               <span>Jelajahi Makanan</span>
             </Link>
+            {roleLink && (
+              <Link
+                href={roleLink.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2.5 text-base font-medium transition-colors ${
+                  pathname === roleLink.href
+                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 font-semibold"
+                    : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                }`}
+              >
+                <svg
+                  className="h-5 w-5 text-emerald-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth="2"
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
+                  />
+                </svg>
+                <span>{roleLink.label}</span>
+              </Link>
+            )}
           </div>
 
           <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
@@ -432,8 +524,8 @@ export default function Navbar() {
                     <span className="text-sm font-semibold text-slate-900 dark:text-white truncate">
                       {displayName}
                     </span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                      {user.email}
+                    <span className="text-xs text-slate-500 dark:text-slate-400 truncate capitalize">
+                      {user.email} • {userRole ? `Role: ${userRole}` : "Aktif"}
                     </span>
                   </div>
                 </div>

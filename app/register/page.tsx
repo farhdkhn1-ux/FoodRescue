@@ -19,6 +19,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [role, setRole] = useState<"buyer" | "seller">("buyer");
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -76,6 +77,7 @@ export default function RegisterPage() {
         options: {
           data: {
             name: trimmedName,
+            role, // Mengirim pilihan role ('buyer' atau 'seller')
           },
         },
       });
@@ -93,25 +95,26 @@ export default function RegisterPage() {
         return;
       }
 
+      const roleLabel = role === "seller" ? "Mitra Penjual" : "Pembeli";
+      const targetPath = role === "seller" ? "/seller" : "/buyer";
+
       // Periksa apakah email konfirmasi diperlukan.
-      // Jika Supabase mengharuskan email confirmation, data.session akan null
-      // meskipun data.user sudah ada.
       if (data.user && !data.session) {
         setSuccess(
-          "Registrasi berhasil! Silakan periksa email Anda untuk mengonfirmasi akun sebelum login."
+          `Registrasi berhasil sebagai ${roleLabel}! Silakan periksa email Anda untuk mengonfirmasi akun sebelum login.`
         );
         setLoading(false);
         return;
       }
 
       // Jika email confirmation tidak aktif, user langsung login
-      setSuccess("Registrasi berhasil! Mengalihkan ke halaman utama...");
+      setSuccess(`Registrasi berhasil sebagai ${roleLabel}! Mengalihkan...`);
       setLoading(false);
 
-      // Redirect setelah jeda singkat agar user membaca pesan sukses
+      // Redirect ke area sesuai role yang dipilih
       setTimeout(() => {
-        router.push("/");
-      }, 1500);
+        router.push(targetPath);
+      }, 1200);
     } catch {
       setError("Terjadi kesalahan. Silakan coba lagi.");
       setLoading(false);
@@ -151,6 +154,61 @@ export default function RegisterPage() {
           <h2 className="mb-6 text-xl font-semibold">Daftar</h2>
 
           <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Pilihan Jenis Akun: Buyer vs Seller */}
+            <div>
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Pilih Jenis Akun
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  id="register-role-buyer"
+                  onClick={() => setRole("buyer")}
+                  className={`relative flex flex-col items-center justify-center rounded-xl border p-3 text-center transition-all focus:outline-none ${
+                    role === "buyer"
+                      ? "border-emerald-600 bg-emerald-50/70 text-emerald-950 ring-2 ring-emerald-500/20 dark:border-emerald-500 dark:bg-emerald-950/40 dark:text-emerald-200"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700/60"
+                  }`}
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300 mb-1.5">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                    </svg>
+                  </div>
+                  <span className="text-xs font-bold">Pembeli</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Selamatkan Makanan
+                  </span>
+                  {role === "buyer" && (
+                    <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-emerald-600" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  id="register-role-seller"
+                  onClick={() => setRole("seller")}
+                  className={`relative flex flex-col items-center justify-center rounded-xl border p-3 text-center transition-all focus:outline-none ${
+                    role === "seller"
+                      ? "border-emerald-600 bg-emerald-50/70 text-emerald-950 ring-2 ring-emerald-500/20 dark:border-emerald-500 dark:bg-emerald-950/40 dark:text-emerald-200"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700/60"
+                  }`}
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300 mb-1.5">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349M3.75 21V9.349m0 0a3.001 3.001 0 0 0 3.75-.615A2.993 2.993 0 0 0 9.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 0 0 2.25 1.016c.896 0 1.7-.393 2.25-1.015a3.001 3.001 0 0 0 3.75.614m-16.5 0a3.004 3.004 0 0 1-.621-4.72l1.189-1.19A1.5 1.5 0 0 1 5.378 3h13.243a1.5 1.5 0 0 1 1.06.44l1.19 1.189a3 3 0 0 1-.621 4.72m-13.5 8.651h3a.75.75 0 0 0 .75-.75V13.5a.75.75 0 0 0-.75-.75h-3a.75.75 0 0 0-.75.75v2.25c0 .414.336.75.75.75Z" />
+                    </svg>
+                  </div>
+                  <span className="text-xs font-bold">Mitra Penjual</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Jual Surplus Toko
+                  </span>
+                  {role === "seller" && (
+                    <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-emerald-600" />
+                  )}
+                </button>
+              </div>
+            </div>
             {/* Nama Lengkap */}
             <div>
               <label

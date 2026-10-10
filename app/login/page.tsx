@@ -4,6 +4,8 @@ import { useState, type FormEvent, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { getSafeInternalRedirect } from "@/lib/auth/redirect";
+import { isValidRole } from "@/lib/auth/roles";
 
 /**
  * Komponen Form Login Food Rescue.
@@ -22,27 +24,6 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  /**
-   * Validasi redirect URL agar terhindar dari bahaya Open Redirect.
-   * Hanya rute internal yang valid yang diizinkan (berawalan '/', bukan '//' atau '/\').
-   */
-  function getSafeRedirectUrl(rawUrl: string | null): string {
-    if (!rawUrl) return "/";
-
-    // Mencegah protocol-relative URL (//evil.com) atau backslash (/\evil.com)
-    if (rawUrl.startsWith("//") || rawUrl.startsWith("/\\")) {
-      return "/";
-    }
-
-    // Pastikan berawalan single slash dan hanya karakter path URL yang aman
-    const safePathRegex = /^\/[a-zA-Z0-9_\-\/]*$/;
-    if (safePathRegex.test(rawUrl)) {
-      return rawUrl;
-    }
-
-    return "/";
-  }
 
   /**
    * Menerjemahkan pesan error dari Supabase ke pesan bahasa Indonesia yang aman,
@@ -120,14 +101,14 @@ function LoginForm() {
       }
 
       // --- 3. Ambil role pengguna dari sumber tepercaya (database, bukan input browser) ---
-      let userRole = "buyer"; // Default fallback
+      let userRole: string | null = null;
 
       try {
         // Coba baca role via RPC get_my_role()
         const { data: roleRpc, error: rpcError } =
           await supabase.rpc("get_my_role");
 
-        if (!rpcError && roleRpc && typeof roleRpc === "string") {
+        if (!rpcError && isValidRole(roleRpc)) {
           userRole = roleRpc;
         } else if (data.user.id) {
           // Fallback: baca langsung dari tabel public.users
@@ -135,31 +116,51 @@ function LoginForm() {
             .from("users")
             .select("role")
             .eq("id", data.user.id)
-            .single();
+            .maybeSingle();
 
-          if (!userError && userData?.role) {
+          if (!userError && isValidRole(userData?.role)) {
             userRole = userData.role;
           }
         }
       } catch {
-        // Jika pembacaan role mengalami kendala, tetap gunakan default aman
-        userRole = "buyer";
+        userRole = null;
       }
 
-      // --- 4. Tentukan redirect sesuai role dan halaman yang tersedia ---
-      // Catatan: Dashboard khusus per role (seller, admin, courier) direncanakan pada tahap W5/W6.
-      // Saat ini halaman yang tersedia adalah beranda marketplace ("/").
-      // Kita siapkan pemetaan rute yang aman dan tidak mengarahkan ke halaman 404.
+      // --- 4. Tentukan redirect aman menggunakan getSafeInternalRedirect ---
       const redirectParam =
         searchParams.get("redirect") || searchParams.get("next");
-      const safeRedirect = getSafeRedirectUrl(redirectParam);
 
-      // Jika ada target redirect URL spesifik dari query param (selain "/") gunakan itu,
-      // selain itu arahkan ke beranda ("/")
-      const targetDestination = safeRedirect !== "/" ? safeRedirect : "/";
+      // Rute tujuan default berbasis role pengguna jika tidak ada parameter redirect eksplisit
+      const defaultRoleDestination =
+        userRole === "admin"
+          ? "/admin"
+          : userRole === "seller"
+          ? "/seller"
+          : userRole === "courier"
+          ? "/courier"
+          : "/buyer";
+
+      const targetDestination = getSafeInternalRedirect(
+        redirectParam,
+        defaultRoleDestination,
+        true
+      );
+
+      const roleDisplay =
+        userRole === "seller"
+          ? "Mitra Penjual"
+          : userRole === "buyer"
+          ? "Pembeli"
+          : userRole === "admin"
+          ? "Administrator"
+          : userRole === "courier"
+          ? "Kurir"
+          : null;
 
       setSuccess(
-        `Login berhasil sebagai ${userRole}! Mengalihkan ke halaman utama...`
+        roleDisplay
+          ? `Login berhasil sebagai ${roleDisplay}! Mengalihkan...`
+          : "Login berhasil! Mengalihkan ke halaman utama..."
       );
       setLoading(false);
 
