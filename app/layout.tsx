@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Navbar from "@/components/Navbar";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,17 +14,21 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Food Rescue",
-  description: "Platform marketplace untuk mengurangi pemborosan makanan dengan menghubungkan penjual dan pembeli.",
+  title: "Food Rescue — Marketplace Penyelamatan Makanan Berlebih",
+  description:
+    "Platform marketplace untuk mengurangi pemborosan makanan dengan menghubungkan penjual dan pembeli.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
-      lang="en"
+      lang="id"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 antialiased">
+        <Navbar />
+        <div className="flex-1 flex flex-col">{children}</div>
+      </body>
     </html>
   );
 }
