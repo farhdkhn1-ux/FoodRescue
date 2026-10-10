@@ -1,14 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/client";
+
+// Tipe data untuk tabel foods (sementara, nanti akan dipindah ke file types)
+interface Food {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  status: string;
+}
 
 export default function Home() {
-  const [foods, setFoods] = useState<any[]>([]);
+  const [foods, setFoods] = useState<Food[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function getFoods() {
+      const supabase = createClient();
       const { data, error } = await supabase
         .from("foods")
         .select("*");
