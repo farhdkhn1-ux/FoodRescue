@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, type FormEvent, Suspense } from "react";
+import { useState, type FormEvent, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -28,13 +28,13 @@ function RegisterForm() {
   const [role, setRole] = useState<"buyer" | "seller">(initialRole);
 
   // Sinkronisasi jika parameter query di URL berubah
-  useEffect(() => {
-    if (queryRole === "seller") {
-      setRole("seller");
-    } else if (queryRole === "buyer") {
-      setRole("buyer");
+  const [prevQueryRole, setPrevQueryRole] = useState(queryRole);
+  if (prevQueryRole !== queryRole) {
+    setPrevQueryRole(queryRole);
+    if (queryRole === "seller" || queryRole === "buyer") {
+      setRole(queryRole);
     }
-  }, [queryRole]);
+  }
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);

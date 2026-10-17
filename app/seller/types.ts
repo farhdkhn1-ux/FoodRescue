@@ -27,9 +27,9 @@ export interface FoodItem {
   } | null;
 }
 
-export interface ActionResponse {
+export interface ActionResponse<T = unknown> {
   success: boolean;
   message?: string;
   error?: string;
-  data?: unknown;
+  data?: T;
 }

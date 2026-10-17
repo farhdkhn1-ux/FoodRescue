@@ -51,6 +51,15 @@ export default async function SellerPage() {
 
   const initialFoods: FoodItem[] = (foodsData as unknown as FoodItem[]) || [];
 
+  // Ambil data profil seller (alamat/lokasi jika ada)
+  const { data: userProfile } = await supabase
+    .from("users")
+    .select("address")
+    .eq("id", auth.user.id)
+    .maybeSingle();
+
+  const sellerAddress = (userProfile?.address as string | undefined) || null;
+
   return (
     <SellerDashboardClient
       initialFoods={initialFoods}
@@ -58,6 +67,7 @@ export default async function SellerPage() {
       userEmail={auth.user.email || ""}
       userId={auth.user.id}
       userRole={auth.role}
+      sellerAddress={sellerAddress}
     />
   );
 }
