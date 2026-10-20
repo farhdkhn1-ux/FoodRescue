@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Paksa dark mode berbasis class .dark (bukan prefers-color-scheme)
+   Karena tidak ada class .dark yang ditambahkan ke <html>,
+   website selalu tampil light terlepas dari preferensi OS pengguna. */
+@variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -12,12 +17,8 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* Dark mode CSS variables sengaja dihapus.
+   Website selalu menggunakan nilai light dari :root di atas. */
 
 body {
   background: var(--background);
