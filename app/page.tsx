@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import type { User } from "@supabase/supabase-js";
 
 // Tipe data untuk tabel foods (sementara, nanti akan dipindah ke file types)
 interface Food {
@@ -18,10 +17,6 @@ export default function Home() {
   const [foods, setFoods] = useState<Food[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Status autentikasi sesi pengguna aktual
-  const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
 
   async function fetchFoods() {
     setLoading(true);
@@ -47,45 +42,7 @@ export default function Home() {
     let isMounted = true;
     const supabase = createClient();
 
-    // 1. Verifikasi status autentikasi pengguna secara aman melalui Supabase Auth
-    async function checkAuthStatus() {
-      try {
-        const {
-          data: { user: currentUser },
-          error: authError,
-        } = await supabase.auth.getUser();
-
-        if (!isMounted) return;
-
-        if (authError || !currentUser) {
-          setUser(null);
-        } else {
-          setUser(currentUser);
-        }
-      } catch {
-        if (isMounted) setUser(null);
-      } finally {
-        if (isMounted) setAuthLoading(false);
-      }
-    }
-
-    checkAuthStatus();
-
-    // 2. Sinkronisasi sesi secara realtime saat login, logout, atau perubahan token
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!isMounted) return;
-
-      if (session?.user) {
-        setUser(session.user);
-      } else {
-        setUser(null);
-      }
-      setAuthLoading(false);
-    });
-
-    // 3. Muat data katalog makanan
+    // Muat data katalog makanan
     async function loadInitial() {
       try {
         const { data, error } = await supabase.from("foods").select("*");
@@ -107,7 +64,6 @@ export default function Home() {
     loadInitial();
     return () => {
       isMounted = false;
-      subscription.unsubscribe();
     };
   }, []);
 
@@ -152,42 +108,28 @@ export default function Home() {
 
             {/* CTA Group */}
             <div className="mt-8 flex flex-col items-center justify-center gap-4">
-              {!authLoading && !user && (
-                <div className="flex flex-wrap items-center justify-center gap-3">
-                  <Link
-                    id="cta-register-buyer"
-                    href="/register"
-                    className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm shadow-emerald-600/30 transition-all hover:bg-emerald-700 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:bg-emerald-500 dark:hover:bg-emerald-600"
-                  >
-                    Daftar Sebagai Pembeli
-                  </Link>
-                  <Link
-                    id="cta-register-seller"
-                    href="/register?role=seller"
-                    className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-emerald-600 bg-emerald-50/70 px-5 py-2.5 text-sm font-semibold text-emerald-700 shadow-2xs transition-colors hover:bg-emerald-100 hover:border-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:border-emerald-500 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-950/70"
-                  >
-                    Daftar Sebagai Penjual
-                  </Link>
-                  <Link
-                    id="cta-login"
-                    href="/login"
-                    className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-2xs transition-colors hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                  >
-                    Login
-                  </Link>
-                </div>
-              )}
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <Link
+                  id="cta-register"
+                  href="/register"
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm shadow-emerald-600/30 transition-all hover:bg-emerald-700 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:bg-emerald-500 dark:hover:bg-emerald-600"
+                >
+                  Daftar
+                </Link>
+                <Link
+                  id="cta-login"
+                  href="/login"
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 shadow-2xs transition-colors hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  Login
+                </Link>
+              </div>
 
-              {/* Tombol Jelajahi Makanan Tersedia (di bagian bawah tombol pendaftaran/login jika belum login, atau satu-satunya tombol jika sudah login) */}
               <div>
                 <a
                   id="cta-explore-catalog"
                   href="#katalog"
-                  className={
-                    !authLoading && !user
-                      ? "inline-flex min-h-[44px] items-center justify-center rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 shadow-2xs transition-colors hover:border-emerald-300 hover:bg-slate-50 hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-emerald-400"
-                      : "inline-flex min-h-[44px] items-center justify-center rounded-xl bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm shadow-emerald-600/30 transition-all hover:bg-emerald-700 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:bg-emerald-500 dark:hover:bg-emerald-600"
-                  }
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 shadow-2xs transition-colors hover:border-emerald-300 hover:bg-slate-50 hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-emerald-400"
                 >
                   Jelajahi Makanan Tersedia
                 </a>
