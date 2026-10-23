@@ -5,6 +5,8 @@ import { useState, useTransition, type FormEvent, type ChangeEvent } from "react
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Category, FoodItem, FoodStatus, FoodType } from "./types";
+import type { Order } from "@/lib/types/food";
+import SellerOrdersManager from "./SellerOrdersManager";
 import {
   createFoodAction,
   updateFoodAction,
@@ -19,6 +21,7 @@ interface SellerDashboardClientProps {
   userId: string;
   userRole: string;
   sellerAddress?: string | null;
+  initialOrders?: Order[];
 }
 
 function toDatetimeLocal(d: Date): string {
@@ -54,10 +57,17 @@ export default function SellerDashboardClient({
   userId,
   userRole,
   sellerAddress,
+  initialOrders = [],
 }: SellerDashboardClientProps) {
   const router = useRouter();
   const [foods, setFoods] = useState<FoodItem[]>(initialFoods);
   const [isPending, startTransition] = useTransition();
+
+  // Tab state (Katalog Makanan vs Pesanan Masuk)
+  const pendingOrdersCount = (initialOrders || []).filter((o) => o.status === "pending").length;
+  const [activeTab, setActiveTab] = useState<"inventory" | "orders">(
+    pendingOrdersCount > 0 ? "orders" : "inventory"
+  );
 
   // Filter state
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
@@ -412,6 +422,54 @@ export default function SellerDashboardClient({
         </div>
       </div>
 
+      {/* Navigasi Tab: Inventaris Makanan vs Manajemen Pesanan Masuk */}
+      <div className="mt-6 flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+        <button
+          type="button"
+          onClick={() => setActiveTab("inventory")}
+          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+            activeTab === "inventory"
+              ? "bg-emerald-600 text-white shadow-xs"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+          }`}
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+          <span>Katalog Makanan Toko ({foods.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("orders")}
+          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all relative ${
+            activeTab === "orders"
+              ? "bg-emerald-600 text-white shadow-xs"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+          }`}
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+          <span>Pesanan Masuk</span>
+          {pendingOrdersCount > 0 ? (
+            <span className="rounded-full bg-amber-500 text-white px-2 py-0.5 text-[10px] font-black animate-pulse">
+              {pendingOrdersCount} Perlu Diproses
+            </span>
+          ) : (
+            <span className="text-[11px] opacity-75 font-normal">
+              ({initialOrders.length})
+            </span>
+          )}
+        </button>
+      </div>
+
+      {activeTab === "orders" ? (
+        <div className="mt-6">
+          <SellerOrdersManager initialOrders={initialOrders} />
+        </div>
+      ) : (
+        <>
       {/* Banner Notifikasi Feedback Dashboard */}
       {feedback && (
         <div
@@ -752,6 +810,8 @@ export default function SellerDashboardClient({
           </div>
         )}
       </div>
+      </>
+      )}
 
       {/* MODAL: Tambah Makanan Baru */}
       {isAddModalOpen && (

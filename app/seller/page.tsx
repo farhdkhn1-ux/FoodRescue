@@ -2,6 +2,8 @@ import { requireRole } from "@/lib/auth/guard";
 import { createClient } from "@/lib/supabase/server";
 import SellerDashboardClient from "./SellerDashboardClient";
 import type { Category, FoodItem } from "./types";
+import { getSellerOrdersAction } from "@/app/actions/order";
+import type { Order } from "@/lib/types/food";
 
 /**
  * Halaman Dashboard Mitra Penjual (Seller Dashboard)
@@ -15,6 +17,7 @@ import type { Category, FoodItem } from "./types";
  * Data diambil secara server-side dari Supabase:
  * - Kategori dari tabel `categories`.
  * - Daftar makanan dari tabel `foods` (difilter per `seller_id` untuk seller).
+ * - Daftar pesanan masuk dari RPC / query `orders` terproteksi.
  */
 export default async function SellerPage() {
   // 1. Otorisasi ketat sisi server
@@ -51,6 +54,10 @@ export default async function SellerPage() {
 
   const initialFoods: FoodItem[] = (foodsData as unknown as FoodItem[]) || [];
 
+  // Ambil pesanan masuk penjual
+  const ordersResult = await getSellerOrdersAction();
+  const initialOrders: Order[] = ordersResult.success && ordersResult.data ? ordersResult.data : [];
+
   // Ambil data profil seller (alamat/lokasi jika ada)
   const { data: userProfile } = await supabase
     .from("users")
@@ -68,6 +75,7 @@ export default async function SellerPage() {
       userId={auth.user.id}
       userRole={auth.role}
       sellerAddress={sellerAddress}
+      initialOrders={initialOrders}
     />
   );
 }
