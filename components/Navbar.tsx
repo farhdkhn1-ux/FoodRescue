@@ -6,6 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { isValidRole } from "@/lib/auth/roles";
 import type { User } from "@supabase/supabase-js";
+import NotificationBell from "./NotificationBell";
 
 /**
  * Komponen Navbar Responsif Food Rescue
@@ -271,6 +272,9 @@ export default function Navbar() {
           ) : user ? (
             // State: SUDAH LOGIN
             <div className="flex items-center gap-3">
+              {/* Lonceng Notifikasi Realtime (W5) */}
+              <NotificationBell userId={user.id} userRole={userRole} />
+
               {/* Profil Pengguna */}
               <div className="flex items-center gap-2.5 rounded-full border border-slate-200 bg-slate-50/80 px-3 py-1.5 dark:border-slate-800 dark:bg-slate-800/80">
                 <div
@@ -365,7 +369,8 @@ export default function Navbar() {
         </div>
 
         {/* Tombol Hamburger Menu Mobile */}
-        <div className="flex items-center md:hidden">
+        <div className="flex items-center gap-2 md:hidden">
+          {user && <NotificationBell userId={user.id} userRole={userRole} />}
           <button
             id="mobile-menu-toggle"
             type="button"

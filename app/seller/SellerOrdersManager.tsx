@@ -1,8 +1,9 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import type { Order, OrderStatus } from "@/lib/types/food";
 import {
   updateOrderStatusAction,
@@ -69,8 +70,55 @@ function getStatusBadge(status: OrderStatus) {
 export default function SellerOrdersManager({ initialOrders }: SellerOrdersManagerProps) {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>(initialOrders);
+  const [prevInitialOrders, setPrevInitialOrders] = useState<Order[]>(initialOrders);
+  if (prevInitialOrders !== initialOrders) {
+    setPrevInitialOrders(initialOrders);
+    setOrders(initialOrders);
+  }
   const [selectedFilter, setSelectedFilter] = useState<string>("pending");
   const [isPending, startTransition] = useTransition();
+
+  // Listener Realtime Supabase untuk pembaruan pesanan masuk & status secara langsung (W5)
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("seller-orders-live-updates")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "orders",
+        },
+        () => {
+          router.refresh();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "orders",
+        },
+        (payload) => {
+          const updated = payload.new as { id: number; status: OrderStatus };
+          if (updated && updated.id) {
+            setOrders((prev) =>
+              prev.map((o) =>
+                o.id === updated.id ? { ...o, status: updated.status } : o
+              )
+            );
+            router.refresh();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [router]);
 
   // Feedback Notification
   const [feedback, setFeedback] = useState<{

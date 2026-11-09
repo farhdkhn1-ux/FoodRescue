@@ -1,16 +1,155 @@
 import { requireRole } from "@/lib/auth/guard";
+import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import CourierDashboardClient, {
+  type DeliveryOrder,
+} from "./CourierDashboardClient";
+
+interface RawOrderItem {
+  id: number;
+  food_id: number;
+  seller_id: string;
+  quantity: number;
+  price: number;
+  subtotal: number;
+  foods?: {
+    name: string;
+  } | null;
+}
+
+interface RawOrder {
+  id: number;
+  buyer_id: string;
+  total_amount: number | string;
+  status: string;
+  pickup_method: string;
+  shipping_address: string | null;
+  created_at: string;
+  order_items?: RawOrderItem[];
+}
 
 /**
- * Halaman Area Kurir (Courier Area)
+ * Halaman Area Kurir Pengantaran (Courier Area) — Food Rescue W5
  *
- * Terproteksi penuh di sisi server (Server Component).
- * Memanggil `requireRole(["courier", "admin"], "/courier")` sebelum merender komponen apa pun.
- * Jika belum login -> diarahkan ke `/login?redirect=/courier`.
- * Jika role tidak memenuhi izin -> diarahkan ke `/unauthorized`.
+ * Terproteksi penuh di sisi server (Server Component):
+ * - Memanggil `requireRole(["courier", "admin"], "/courier")`.
+ * - Pengguna belum login -> diarahkan ke `/login?redirect=/courier`.
+ * - Role tidak sesuai -> diarahkan ke `/unauthorized`.
+ * - Menampilkan tugas pengantaran delivery aktif & kalkulasi jarak toko - kurir.
  */
 export default async function CourierPage() {
   const auth = await requireRole(["courier", "admin"], "/courier");
+  const supabase = await createClient();
+
+  // 1. Ambil data profil lokasi kurir dari kolom users eksisting
+  const { data: userProfile } = await supabase
+    .from("users")
+    .select("address, latitude, longitude")
+    .eq("id", auth.user.id)
+    .maybeSingle();
+
+  const courierLocation = {
+    address: (userProfile?.address as string | undefined) || null,
+    latitude:
+      userProfile?.latitude !== null && userProfile?.latitude !== undefined
+        ? Number(userProfile.latitude)
+        : null,
+    longitude:
+      userProfile?.longitude !== null && userProfile?.longitude !== undefined
+        ? Number(userProfile.longitude)
+        : null,
+  };
+
+  // 2. Ambil pesanan delivery yang perlu diantar (confirmed atau completed)
+  const { data: rawOrdersData, error: ordersError } = await supabase
+    .from("orders")
+    .select(`
+      id,
+      buyer_id,
+      total_amount,
+      status,
+      pickup_method,
+      shipping_address,
+      created_at,
+      order_items (
+        id,
+        food_id,
+        seller_id,
+        quantity,
+        price,
+        subtotal,
+        foods (
+          name
+        )
+      )
+    `)
+    .eq("pickup_method", "delivery")
+    .in("status", ["confirmed", "completed"])
+    .order("created_at", { ascending: false });
+
+  if (ordersError) {
+    console.error("Gagal memuat tugas pengantaran kurir:", ordersError);
+  }
+
+  const rawOrders: RawOrder[] = (rawOrdersData as unknown as RawOrder[]) || [];
+
+  // 3. Ambil data profil toko mitra penjual terkait untuk titik penjemputan
+  const sellerIds = Array.from(
+    new Set(
+      rawOrders
+        .flatMap((o) => (o.order_items || []).map((i) => i.seller_id))
+        .filter(Boolean)
+    )
+  );
+
+  const sellersMap: Record<
+    string,
+    {
+      name: string | null;
+      address: string | null;
+      latitude: number | null;
+      longitude: number | null;
+    }
+  > = {};
+
+  if (sellerIds.length > 0) {
+    const { data: sellersData } = await supabase
+      .from("users")
+      .select("id, name, address, latitude, longitude")
+      .in("id", sellerIds);
+
+    (sellersData || []).forEach((s) => {
+      sellersMap[s.id] = {
+        name: s.name,
+        address: s.address,
+        latitude: s.latitude !== null && s.latitude !== undefined ? Number(s.latitude) : null,
+        longitude: s.longitude !== null && s.longitude !== undefined ? Number(s.longitude) : null,
+      };
+    });
+  }
+
+  // 4. Transformasi ke format DeliveryOrder
+  const initialOrders: DeliveryOrder[] = rawOrders.map((ro) => {
+    const firstSellerId = ro.order_items?.[0]?.seller_id;
+    const sellerInfo = firstSellerId ? sellersMap[firstSellerId] : null;
+
+    return {
+      id: ro.id,
+      buyer_id: ro.buyer_id,
+      total_amount: Number(ro.total_amount),
+      status: ro.status,
+      pickup_method: ro.pickup_method,
+      shipping_address: ro.shipping_address,
+      created_at: ro.created_at,
+      items: (ro.order_items || []).map((item) => ({
+        id: item.id,
+        food_name: item.foods?.name || "Makanan",
+        quantity: item.quantity,
+        seller_id: item.seller_id,
+      })),
+      seller_info: sellerInfo || null,
+    };
+  });
 
   return (
     <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-10 md:py-14">
@@ -36,68 +175,64 @@ export default async function CourierPage() {
             Area Kurir Pengantaran
           </h1>
           <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
-            Akses khusus penjemputan makanan berlebih dari mitra penjual menuju pembeli.
+            Penjemputan makanan berlebih dari mitra penjual dan pengantaran ke pembeli secara realtime.
           </p>
         </div>
 
         <Link
           href="/"
-          className="inline-flex min-h-[40px] items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 self-start sm:self-auto"
+          className="inline-flex min-h-[40px] items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 self-start sm:self-auto transition-colors"
         >
           Kembali ke Beranda
         </Link>
       </div>
 
       {/* Informasi Otorisasi Sisi Server */}
-      <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-5">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+      <div className="mt-6 mb-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-            Email Terotentikasi
+            Email Kurir
           </span>
-          <p className="mt-2 text-base font-bold text-slate-900 dark:text-white truncate">
+          <p className="mt-1 text-sm font-bold text-slate-900 dark:text-white truncate">
             {auth.user.email}
           </p>
-          <span className="mt-1 text-xs text-emerald-600 dark:text-emerald-400 block">
+          <span className="mt-0.5 text-xs text-emerald-600 dark:text-emerald-400 block">
             ID: {auth.user.id.slice(0, 8)}...
           </span>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-            Role Terverifikasi Database
+            Role Terverifikasi
           </span>
-          <p className="mt-2 text-base font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+          <p className="mt-1 text-sm font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
             {auth.role}
           </p>
-          <span className="mt-1 text-xs text-slate-500 dark:text-slate-400 block">
-            Sumber: public.users / RPC
+          <span className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 block">
+            Otorisasi: Delivery & Pickup
           </span>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-            Status Proteksi
+            Proteksi Lokasi & Rute
           </span>
-          <div className="mt-2 flex items-center gap-1.5 text-base font-bold text-emerald-600 dark:text-emerald-400">
+          <div className="mt-1 flex items-center gap-1.5 text-sm font-bold text-emerald-600 dark:text-emerald-400">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Aktif & Terlindungi</span>
+            <span>Aktif & Terlindungi RLS</span>
           </div>
-          <span className="mt-1 text-xs text-slate-500 dark:text-slate-400 block">
-            Layer: proxy.ts + Server Component
+          <span className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 block">
+            Haversine Geolocation Engine
           </span>
         </div>
       </div>
 
-      {/* Roadmap & Keterangan Tahap */}
-      <div className="mt-8 rounded-2xl border border-dashed border-amber-200 bg-amber-50/50 p-6 dark:border-amber-900/40 dark:bg-amber-950/20">
-        <h2 className="text-sm font-bold text-amber-900 dark:text-amber-300">
-          Catatan Arsitektur Proteksi (Tahap 5):
-        </h2>
-        <p className="mt-2 text-xs leading-relaxed text-amber-800 dark:text-amber-300">
-          Halaman ini memastikan hanya pengguna dengan role <strong>courier</strong> yang dapat membuka area tugas kurir ini.
-          Fitur daftar tugas pengantaran aktif dan konfirmasi penyerahan makanan akan dikembangkan pada tahap selanjutnya.
-        </p>
-      </div>
+      {/* Komponen Utama Interaktif Kurir */}
+      <CourierDashboardClient
+        initialLocation={courierLocation}
+        initialOrders={initialOrders}
+        courierEmail={auth.user.email || ""}
+      />
     </main>
   );
 }

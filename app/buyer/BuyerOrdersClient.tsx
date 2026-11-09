@@ -1,9 +1,10 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import type { Order, OrderStatus } from "@/lib/types/food";
 import { cancelOrderAction } from "@/app/actions/order";
 
@@ -71,8 +72,44 @@ export default function BuyerOrdersClient({
 }: BuyerOrdersClientProps) {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>(initialOrders);
+  const [prevInitialOrders, setPrevInitialOrders] = useState<Order[]>(initialOrders);
+  if (prevInitialOrders !== initialOrders) {
+    setPrevInitialOrders(initialOrders);
+    setOrders(initialOrders);
+  }
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
   const [isPending, startTransition] = useTransition();
+
+  // Listener Realtime Supabase untuk pembaruan status pesanan secara langsung (W5)
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("buyer-orders-live-updates")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "orders",
+        },
+        (payload) => {
+          const updated = payload.new as { id: number; status: OrderStatus };
+          if (updated && updated.id) {
+            setOrders((prev) =>
+              prev.map((o) =>
+                o.id === updated.id ? { ...o, status: updated.status } : o
+              )
+            );
+            router.refresh();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [router]);
 
   // Modal Pembatalan
   const [cancellingOrderId, setCancellingOrderId] = useState<number | null>(null);
