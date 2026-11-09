@@ -199,7 +199,7 @@ function LoginForm() {
             Food<span className="text-emerald-600 dark:text-emerald-400">Rescue</span>
           </h1>
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-            Masuk ke akun Anda untuk mulai menyelamatkan makanan
+            Masuk ke akun Anda untuk menyalurkan atau mengelola pakan ternak
           </p>
         </div>
 
@@ -224,6 +224,7 @@ function LoginForm() {
                 placeholder="nama@email.com"
                 required
                 autoComplete="email"
+                suppressHydrationWarning
                 className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-700 dark:bg-gray-800 dark:focus:border-emerald-400"
               />
             </div>
@@ -245,6 +246,7 @@ function LoginForm() {
                   placeholder="Masukkan password Anda"
                   required
                   autoComplete="current-password"
+                  suppressHydrationWarning
                   className="w-full rounded-lg border border-gray-300 px-4 py-2.5 pr-11 text-sm outline-none transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-700 dark:bg-gray-800 dark:focus:border-emerald-400"
                 />
                 <button

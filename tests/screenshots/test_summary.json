@@ -1,0 +1,73 @@
+{
+  "timestamp": "2026-11-09T16:23:50.815Z",
+  "results": [
+    {
+      "feature": "Katalog Pakan Ternak Berkelanjutan (Desktop)",
+      "status": "PASS",
+      "evidence": "Title: \"Food Rescue — Food Waste to Animal Feed\", Condition Options: [Semua Kondisi, Segar / Layak Pakan, Bahan Fermentasi, Bahan Kering, Bahan Basah / Bubur, Afkir / Olahan], Screenshot: 01_homepage_catalog_desktop.png",
+      "notes": "Filter kondisi fisik bahan pakan (segar, fermentasi, kering, basah, afkir) tampil sempurna."
+    },
+    {
+      "feature": "Responsivitas Layout Mobile (390x844)",
+      "status": "PASS",
+      "evidence": "Screenshot: 02_homepage_catalog_mobile.png",
+      "notes": "Layout reflow responsif, navigasi mobile bersih, tidak ada horizontal overflow."
+    },
+    {
+      "feature": "Detail Pakan & Zero-Trust Phone Masking (/food/1)",
+      "status": "PASS",
+      "evidence": "HTTP 200, hasUnmaskedPhone: false, Screenshot: 03_food_detail_page.png",
+      "notes": "Pengunjung anonim tidak dapat melihat nomor telepon seller. Data lokasi penjemputan terlindungi."
+    },
+    {
+      "feature": "Otorisasi Ketat Sisi Server (RBAC Route Guard)",
+      "status": "PASS",
+      "evidence": "Seluruh rute terproteksi (/seller, /buyer, /admin, /courier) mengalihkan anon ke /login.",
+      "notes": "Server-side guard di proxy.ts dan requireRole mencegah akses tanpa autentikasi."
+    },
+    {
+      "feature": "Validasi Form Login & Keamanan Input",
+      "status": "PASS",
+      "evidence": "isEmailRequired: true, isFormatRejected: true, hasPasswordToggle: true, Screenshot: 05_login_validation.png",
+      "notes": "Input email & password memiliki atribut required, validasi format email aktif, dan toggle visibility berfungsi aman."
+    },
+    {
+      "feature": "Pilihan Role Pendaftaran (Peternak vs Sumber Bahan)",
+      "status": "PASS",
+      "evidence": "hasBuyerRole: true, hasSellerRole: true, Screenshot: 06_register_role_selection.png",
+      "notes": "Tersedia pilihan role spesifik konsep W6 (Peternak / Buyer dan Sumber Bahan / Seller)."
+    },
+    {
+      "feature": "Toggle Izin Publikasi Nomor Telepon (is_phone_public)",
+      "status": "BLOCKED",
+      "evidence": "Kolom users.is_phone_public belum diaplikasikan di remote Supabase production.",
+      "notes": "Komponen UI & server action siap 100%. Memerlukan eksekusi 20261110_w6_animal_feed_refactor.sql."
+    },
+    {
+      "feature": "Penyimpanan Karakteristik Pakan (unit, condition, target_livestock)",
+      "status": "BLOCKED",
+      "evidence": "Kolom foods.condition, foods.unit, foods.target_livestock belum diaplikasikan di remote Supabase.",
+      "notes": "Validasi frontend & server action siap 100%. Memerlukan eksekusi 20261110_w6_animal_feed_refactor.sql."
+    },
+    {
+      "feature": "Validasi Titik Lokasi Penjemputan Seller Sebelum Listing",
+      "status": "PASS",
+      "evidence": "Komponen SellerStoreProfileCard memvalidasi koordinat lat (-90 s/d 90) dan lng (-180 s/d 180).",
+      "notes": "Validasi client dan server action location.ts aktif menolak koordinat tidak valid."
+    },
+    {
+      "feature": "Bebas dari React Hydration Error #418",
+      "status": "PASS",
+      "evidence": "hasHydrationError: false",
+      "notes": "Komponen aman dari perbedaan rendering server-client (WIB formatter & dynamic state)."
+    },
+    {
+      "feature": "Supabase Realtime & WebSocket Stability",
+      "status": "PASS",
+      "evidence": "hasWebSocketLeak: false",
+      "notes": "Environment variables trimmed tanpa spasi/newline (%0A), Realtime channel dikelola rapi."
+    }
+  ],
+  "consoleErrors": [],
+  "networkErrors": []
+}

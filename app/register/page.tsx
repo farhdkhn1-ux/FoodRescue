@@ -160,19 +160,19 @@ function RegisterForm() {
             Food<span className="text-emerald-600 dark:text-emerald-400">Rescue</span>
           </h1>
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-            Buat akun baru untuk mulai menyelamatkan makanan
+            Daftar platform sirkular Food Waste to Animal Feed
           </p>
         </div>
 
         {/* Form Card */}
         <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-          <h2 className="mb-6 text-xl font-semibold">Daftar</h2>
+          <h2 className="mb-6 text-xl font-semibold">Daftar Akun Baru</h2>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Pilihan Jenis Akun: Buyer vs Seller */}
+            {/* Pilihan Jenis Akun: Peternak vs Sumber Bahan */}
             <div>
               <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Pilih Jenis Akun
+                Pilih Jenis Akun Anda
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <button
@@ -190,9 +190,9 @@ function RegisterForm() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
                     </svg>
                   </div>
-                  <span className="text-xs font-bold">Pembeli</span>
+                  <span className="text-xs font-bold">Peternak (Buyer)</span>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Selamatkan Makanan
+                    Pencari Bahan Pakan
                   </span>
                   {role === "buyer" && (
                     <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-emerald-600" />
@@ -214,9 +214,9 @@ function RegisterForm() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349M3.75 21V9.349m0 0a3.001 3.001 0 0 0 3.75-.615A2.993 2.993 0 0 0 9.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 0 0 2.25 1.016c.896 0 1.7-.393 2.25-1.015a3.001 3.001 0 0 0 3.75.614m-16.5 0a3.004 3.004 0 0 1-.621-4.72l1.189-1.19A1.5 1.5 0 0 1 5.378 3h13.243a1.5 1.5 0 0 1 1.06.44l1.19 1.189a3 3 0 0 1-.621 4.72m-13.5 8.651h3a.75.75 0 0 0 .75-.75V13.5a.75.75 0 0 0-.75-.75h-3a.75.75 0 0 0-.75.75v2.25c0 .414.336.75.75.75Z" />
                     </svg>
                   </div>
-                  <span className="text-xs font-bold">Mitra Penjual</span>
+                  <span className="text-xs font-bold">Sumber Bahan (Seller)</span>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Jual Surplus Toko
+                    Restoran / Pasar / Pabrik
                   </span>
                   {role === "seller" && (
                     <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-emerald-600" />

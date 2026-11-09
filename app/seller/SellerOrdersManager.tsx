@@ -9,25 +9,14 @@ import {
   updateOrderStatusAction,
   cancelOrderAction,
 } from "@/app/actions/order";
+import { formatDateWIB } from "@/lib/utils/format";
 
 interface SellerOrdersManagerProps {
   initialOrders: Order[];
 }
 
 function formatDate(dateStr: string): string {
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return new Intl.DateTimeFormat("id-ID", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(d);
-  } catch {
-    return dateStr;
-  }
+  return formatDateWIB(dateStr);
 }
 
 function getStatusBadge(status: OrderStatus) {
@@ -81,8 +70,9 @@ export default function SellerOrdersManager({ initialOrders }: SellerOrdersManag
   // Listener Realtime Supabase untuk pembaruan pesanan masuk & status secara langsung (W5)
   useEffect(() => {
     const supabase = createClient();
+    const channelName = `seller-orders-${Date.now()}`;
     const channel = supabase
-      .channel("seller-orders-live-updates")
+      .channel(channelName)
       .on(
         "postgres_changes",
         {
@@ -113,7 +103,11 @@ export default function SellerOrdersManager({ initialOrders }: SellerOrdersManag
           }
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === "CHANNEL_ERROR" && process.env.NODE_ENV !== "production") {
+          console.warn("[Realtime Seller Orders] Subscription error:", err?.message);
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -152,7 +146,7 @@ export default function SellerOrdersManager({ initialOrders }: SellerOrdersManag
         );
         setFeedback({
           type: "success",
-          message: `Pesanan #${orderId} berhasil dikonfirmasi! Segera siapkan porsi makanan.`,
+          message: `Pesanan #${orderId} berhasil dikonfirmasi! Segera siapkan bahan pakan untuk diambil atau diantar.`,
         });
         router.refresh();
       } else {
@@ -206,7 +200,7 @@ export default function SellerOrdersManager({ initialOrders }: SellerOrdersManag
         setFeedback({
           type: "success",
           message: `Pesanan #${rejectingOrderId} telah dibatalkan.${
-            shouldRestock ? " Porsi makanan telah dikembalikan ke katalog." : " Porsi fisik ditandai afkir (tidak direstock)."
+            shouldRestock ? " Stok bahan pakan telah dikembalikan ke katalog." : " Bahan fisik ditandai afkir (tidak direstock)."
           }`,
         });
         setRejectingOrderId(null);
@@ -415,13 +409,29 @@ export default function SellerOrdersManager({ initialOrders }: SellerOrdersManag
 
                       <div className="flex-1 min-w-0">
                         <h4 className="text-sm font-bold text-slate-900 truncate">
-                          {item.food?.name || `Menu #${item.food_id}`}
+                          {item.food?.name || `Bahan #${item.food_id}`}
                         </h4>
                         <p className="mt-0.5 text-xs text-slate-500">
-                          Jumlah: <strong className="text-slate-800">{item.quantity} Porsi</strong>
+                          Jumlah: <strong className="text-slate-800">{item.quantity} {item.food?.unit || "kg"}</strong>
                           {" • "}
-                          {item.price === 0 ? "Donasi Sosial" : `Rp ${item.price.toLocaleString("id-ID")} / porsi`}
+                          {item.price === 0 ? "Donasi Pakan" : `Rp ${item.price.toLocaleString("id-ID")} / ${item.food?.unit || "kg"}`}
                         </p>
+                        {item.food?.condition && (
+                          <span className="inline-block mt-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                            Kondisi:{" "}
+                            {item.food.condition === "layak" || item.food.condition === "segar"
+                              ? "Segar / Layak Pakan"
+                              : item.food.condition === "fermentasi"
+                              ? "Bahan Fermentasi"
+                              : item.food.condition === "kering"
+                              ? "Bahan Kering"
+                              : item.food.condition === "basah"
+                              ? "Bahan Basah / Bubur"
+                              : item.food.condition === "afkir"
+                              ? "Afkir / Olahan"
+                              : item.food.condition}
+                          </span>
+                        )}
                       </div>
 
                       <div className="text-right">
@@ -435,9 +445,25 @@ export default function SellerOrdersManager({ initialOrders }: SellerOrdersManag
 
                   {/* Alamat Pengantaran jika Delivery */}
                   {order.pickup_method === "delivery" && order.shipping_address && (
-                    <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-3 text-xs text-sky-900">
-                      <span className="font-bold block text-sky-800">Alamat Pengantaran Pembeli:</span>
-                      <p className="mt-0.5 text-slate-700">{order.shipping_address}</p>
+                    <div className="rounded-2xl border border-sky-200 bg-sky-50/80 p-3.5 text-xs text-sky-950">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-sky-900 flex items-center gap-1.5">
+                          <svg className="h-3.5 w-3.5 text-sky-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+                            <circle cx="12" cy="10" r="3" />
+                          </svg>
+                          Tujuan Pengantaran ke Peternak (Buyer):
+                        </span>
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.shipping_address)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] font-bold text-sky-700 hover:text-sky-900 underline"
+                        >
+                          Buka di Google Maps ↗
+                        </a>
+                      </div>
+                      <p className="text-slate-800 font-medium pl-5">{order.shipping_address}</p>
                     </div>
                   )}
                 </div>
@@ -445,9 +471,9 @@ export default function SellerOrdersManager({ initialOrders }: SellerOrdersManag
                 {/* Footer Pesanan & Tombol Otorisasi Penjual */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t border-slate-100 bg-slate-50/40 px-5 py-3.5">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-xs text-slate-500 font-medium">Total Pesanan:</span>
+                    <span className="text-xs text-slate-500 font-medium">Total Pengajuan:</span>
                     <span className="text-base font-black text-emerald-700">
-                      {isDonation ? "GRATIS (Donasi Sosial)" : `Rp ${order.total_amount.toLocaleString("id-ID")}`}
+                      {isDonation ? "GRATIS (Donasi Pakan)" : `Rp ${order.total_amount.toLocaleString("id-ID")}`}
                     </span>
                   </div>
 
@@ -459,9 +485,9 @@ export default function SellerOrdersManager({ initialOrders }: SellerOrdersManag
                           type="button"
                           disabled={isPending}
                           onClick={() => setRejectingOrderId(order.id)}
-                          className="inline-flex items-center justify-center rounded-xl border border-red-300 bg-white px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                          className="inline-flex items-center justify-center rounded-xl border border-red-300 bg-white px-3.5 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
                         >
-                          Tolak Pesanan
+                          Tolak Pengajuan
                         </button>
                         <button
                           type="button"
@@ -469,7 +495,7 @@ export default function SellerOrdersManager({ initialOrders }: SellerOrdersManag
                           onClick={() => handleConfirmOrder(order.id)}
                           className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition-colors disabled:opacity-50"
                         >
-                          Terima & Siapkan Pesanan
+                          Terima &amp; Siapkan Bahan Pakan
                         </button>
                       </>
                     )}
@@ -533,7 +559,7 @@ export default function SellerOrdersManager({ initialOrders }: SellerOrdersManag
             </div>
 
             <p className="text-xs text-slate-600 leading-relaxed">
-              Tindakan ini akan membatalkan pesanan secara atomik di database. Tentukan apakah porsi fisik makanan layak dikembalikan ke etalase atau diafkir.
+              Tindakan ini akan membatalkan pesanan secara atomik di database. Tentukan apakah bahan pakan layak dikembalikan ke etalase atau diafkir.
             </p>
 
             <div>
@@ -545,7 +571,7 @@ export default function SellerOrdersManager({ initialOrders }: SellerOrdersManag
                 rows={2}
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
-                placeholder="Contoh: Stok fisik rusak di dapur, toko tutup mendadak..."
+                placeholder="Contoh: Stok bahan rusak karena cuaca, kuota pakan telah terpenuhi..."
                 className="w-full rounded-xl border border-slate-300 p-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
               />
             </div>
@@ -561,10 +587,10 @@ export default function SellerOrdersManager({ initialOrders }: SellerOrdersManag
                 />
                 <div className="text-xs">
                   <span className="font-bold text-slate-800 block">
-                    Kembalikan porsi ke katalog makanan (Restock)
+                    Kembalikan stok ke katalog bahan pakan (Restock)
                   </span>
                   <span className="text-slate-500 block mt-0.5">
-                    Centang jika porsi masih utuh & layak jual. Hilangkan centang jika makanan tumpah/rusak (afkir) agar tidak dijual ulang.
+                    Centang jika bahan masih segar & layak pakan. Hilangkan centang jika bahan sudah busuk/rusak (afkir) agar tidak disalurkan ulang.
                   </span>
                 </div>
               </label>

@@ -1,14 +1,9 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
-import type { NotificationItem } from "@/lib/types/notification";
-import {
-  getNotificationsAction,
-  markNotificationReadAction,
-  markAllNotificationsReadAction,
-} from "@/app/actions/notification";
+import { useNotifications } from "@/lib/context/NotificationContext";
+import { formatNotificationDateWIB } from "@/lib/utils/format";
 
 interface NotificationBellProps {
   userId: string;
@@ -31,93 +26,21 @@ function formatNotificationTime(dateStr: string): string {
     if (diffHours < 24) return `${diffHours} jam lalu`;
     if (diffDays < 7) return `${diffDays} hari lalu`;
 
-    return new Intl.DateTimeFormat("id-ID", {
-      day: "numeric",
-      month: "short",
-    }).format(d);
+    return formatNotificationDateWIB(d);
   } catch {
     return dateStr;
   }
 }
 
-export default function NotificationBell({ userId, userRole }: NotificationBellProps) {
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [unreadCount, setUnreadCount] = useState<number>(0);
+export default function NotificationBell({ userRole }: NotificationBellProps) {
+  const context = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Ambil notifikasi awal saat komponen dimuat
-  useEffect(() => {
-    if (!userId) return;
-    let isMounted = true;
-
-    async function loadInitialNotifications() {
-      try {
-        const res = await getNotificationsAction(15);
-        if (isMounted && res.success && res.data) {
-          setNotifications(res.data.notifications);
-          setUnreadCount(res.data.unreadCount);
-        }
-      } catch {
-        // Abaikan jika ada kegagalan koneksi sesaat
-      }
-    }
-
-    loadInitialNotifications();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [userId]);
-
-  // Listener Realtime Supabase
-  useEffect(() => {
-    if (!userId) return;
-
-    const supabase = createClient();
-
-    // Subscribe ke channel realtime tabel notifications untuk user ini
-    const channel = supabase
-      .channel(`notifications:user:${userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => {
-          const newNotif = payload.new as NotificationItem;
-          setNotifications((prev) => [newNotif, ...prev.slice(0, 14)]);
-          setUnreadCount((prev) => prev + 1);
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => {
-          const updated = payload.new as NotificationItem;
-          setNotifications((prev) =>
-            prev.map((n) => (n.id === updated.id ? { ...n, is_read: updated.is_read } : n))
-          );
-          if (updated.is_read) {
-            setUnreadCount((prev) => Math.max(0, prev - 1));
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [userId]);
+  // Ambil state dan aksi dari NotificationContext (terpusat & realtime)
+  const notifications = context ? context.notifications : [];
+  const unreadCount = context ? context.unreadCount : 0;
+  const loading = context ? context.loading : false;
 
   // Tutup dropdown saat klik di luar area
   useEffect(() => {
@@ -136,22 +59,15 @@ export default function NotificationBell({ userId, userRole }: NotificationBellP
 
   // Handler: Tandai 1 notifikasi telah dibaca
   async function handleMarkRead(id: number) {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
-    );
-    setUnreadCount((prev) => Math.max(0, prev - 1));
-    await markNotificationReadAction(id);
+    if (context) {
+      await context.markAsRead(id);
+    }
   }
 
   // Handler: Tandai semua telah dibaca
   async function handleMarkAllRead() {
-    setLoading(true);
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-    setUnreadCount(0);
-    try {
-      await markAllNotificationsReadAction();
-    } finally {
-      setLoading(false);
+    if (context) {
+      await context.markAllAsRead();
     }
   }
 

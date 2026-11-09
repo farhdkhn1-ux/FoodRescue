@@ -46,33 +46,68 @@ export async function createFoodAction(
     const rawImageUrl = String(formData.get("image_url") || "").trim();
     const rawAvailableFrom = String(formData.get("available_from") || "").trim();
     const rawAvailableUntil = String(formData.get("available_until") || "").trim();
+    const rawUnit = String(formData.get("unit") || "kg").trim();
+    const rawCondition = String(formData.get("condition") || "layak").trim();
+    const rawTargetLivestock = String(formData.get("target_livestock") || "Semua Ternak").trim();
+    const rawStorageInstructions = String(formData.get("storage_instructions") || "").trim();
+    const rawCollectedAt = String(formData.get("collected_at") || "").trim();
     const imageFile = formData.get("image_file");
 
-    // 3. Validasi aturan bisnis
+    // 3. Validasi profil toko & kelengkapan lokasi usaha seller (Fitur Wajib W6)
+    const supabase = await createClient();
+    const { data: sellerProfile } = await supabase
+      .from("users")
+      .select("store_name, address, latitude, longitude")
+      .eq("id", authResult.user.id)
+      .maybeSingle();
+
+    if (
+      !sellerProfile?.store_name ||
+      !sellerProfile?.address ||
+      sellerProfile.latitude === null ||
+      sellerProfile.latitude === undefined ||
+      sellerProfile.longitude === null ||
+      sellerProfile.longitude === undefined
+    ) {
+      return {
+        success: false,
+        error:
+          "Profil Toko & Lokasi Penjemputan belum lengkap. Anda wajib melengkapi Nama Toko, Alamat Lengkap, dan Koordinat GPS di menu 'Profil Toko' sebelum menerbitkan listing bahan pakan.",
+      };
+    }
+
+    // 4. Validasi aturan bisnis bahan pakan
     if (!name || name.length < 2) {
-      return { success: false, error: "Nama makanan minimal 2 karakter." };
+      return { success: false, error: "Nama bahan pakan minimal 2 karakter." };
     }
     if (name.length > 100) {
-      return { success: false, error: "Nama makanan maksimal 100 karakter." };
+      return { success: false, error: "Nama bahan pakan maksimal 100 karakter." };
     }
     if (!description) {
-      return { success: false, error: "Deskripsi makanan wajib diisi." };
+      return { success: false, error: "Deskripsi bahan pakan dan peruntukannya wajib diisi." };
     }
     if (isNaN(rawCategoryId) || rawCategoryId <= 0) {
-      return { success: false, error: "Pilih kategori makanan yang sah." };
+      return { success: false, error: "Pilih kategori bahan pakan yang sah." };
     }
 
     const type: FoodType = rawType === "donation" ? "donation" : "sale";
     const price = type === "donation" ? 0 : Math.max(0, rawPrice);
 
     if (type === "sale" && price <= 0) {
-      return { success: false, error: "Harga makanan untuk menu komersial harus lebih dari Rp 0." };
+      return { success: false, error: "Harga bahan pakan komersial harus lebih dari Rp 0." };
     }
 
     const quantity = Math.floor(rawQuantity);
     if (quantity <= 0) {
-      return { success: false, error: "Jumlah porsi makanan minimal 1 porsi (bilangan bulat positif)." };
+      return { success: false, error: "Jumlah bahan pakan minimal 1 (bilangan bulat positif)." };
     }
+
+    const unit = rawUnit || "kg";
+    const validConditions = ["layak", "segar", "fermentasi", "kering", "basah", "afkir"];
+    const condition = validConditions.includes(rawCondition) ? rawCondition : "layak";
+    const targetLivestock = rawTargetLivestock || "Semua Ternak";
+    const storageInstructions = rawStorageInstructions || null;
+    const collectedAt = rawCollectedAt ? new Date(rawCollectedAt).toISOString() : new Date().toISOString();
 
     const validPickupMethods: PickupMethod[] = ["pickup", "delivery", "both"];
     const pickupMethod: PickupMethod = validPickupMethods.includes(rawPickupMethod)
@@ -109,8 +144,6 @@ export async function createFoodAction(
         error: "Batas waktu ketersediaan (available_until) harus lebih lambat dari waktu mulai ketersediaan.",
       };
     }
-
-    const supabase = await createClient();
 
     // 4. Penanganan Gambar: Upload file ke Storage atau simpan URL
     let imageUrl: string | null = null;
@@ -190,7 +223,12 @@ export async function createFoodAction(
         description,
         price,
         quantity,
+        unit,
         type,
+        condition,
+        target_livestock: targetLivestock,
+        storage_instructions: storageInstructions,
+        collected_at: collectedAt,
         pickup_method: pickupMethod,
         image_url: imageUrl,
         status: "available",
@@ -257,21 +295,31 @@ export async function updateFoodAction(
     const rawImageUrl = String(formData.get("image_url") || "").trim();
     const rawAvailableFrom = String(formData.get("available_from") || "").trim();
     const rawAvailableUntil = String(formData.get("available_until") || "").trim();
+    const rawUnit = String(formData.get("unit") || "kg").trim();
+    const rawCondition = String(formData.get("condition") || "layak").trim();
+    const rawTargetLivestock = String(formData.get("target_livestock") || "Semua Ternak").trim();
+    const rawStorageInstructions = String(formData.get("storage_instructions") || "").trim();
+    const rawCollectedAt = String(formData.get("collected_at") || "").trim();
     const imageFile = formData.get("image_file");
 
     if (!name || name.length < 2) {
-      return { success: false, error: "Nama makanan minimal 2 karakter." };
+      return { success: false, error: "Nama bahan pakan minimal 2 karakter." };
     }
     if (!description) {
-      return { success: false, error: "Deskripsi makanan wajib diisi." };
+      return { success: false, error: "Deskripsi bahan pakan dan peruntukannya wajib diisi." };
     }
     if (isNaN(rawCategoryId) || rawCategoryId <= 0) {
-      return { success: false, error: "Pilih kategori makanan yang sah." };
+      return { success: false, error: "Pilih kategori bahan pakan yang sah." };
     }
 
     const type: FoodType = rawType === "donation" ? "donation" : "sale";
     const price = type === "donation" ? 0 : Math.max(0, rawPrice);
     const quantity = Math.max(0, Math.floor(rawQuantity));
+    const unit = rawUnit || "kg";
+    const validConditions = ["layak", "segar", "fermentasi", "kering", "basah", "afkir"];
+    const condition = validConditions.includes(rawCondition) ? rawCondition : "layak";
+    const targetLivestock = rawTargetLivestock || "Semua Ternak";
+    const storageInstructions = rawStorageInstructions || null;
 
     const validPickupMethods: PickupMethod[] = ["pickup", "delivery", "both"];
     const pickupMethod: PickupMethod = validPickupMethods.includes(rawPickupMethod)
@@ -327,9 +375,20 @@ export async function updateFoodAction(
       category_id: rawCategoryId,
       price,
       quantity,
+      unit,
+      condition,
+      target_livestock: targetLivestock,
+      storage_instructions: storageInstructions,
       type,
       pickup_method: pickupMethod,
     };
+
+    if (rawCollectedAt) {
+      const parsedCollected = new Date(rawCollectedAt);
+      if (!isNaN(parsedCollected.getTime())) {
+        updatePayload.collected_at = parsedCollected.toISOString();
+      }
+    }
 
     if (imageUrl !== null || rawImageUrl === "") {
       updatePayload.image_url = imageUrl;

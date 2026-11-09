@@ -1,4 +1,5 @@
 import { createBrowserClient } from "@supabase/ssr";
+import { getSupabaseEnv } from "./env";
 
 /**
  * Membuat Supabase client untuk digunakan di Client Components ("use client").
@@ -8,8 +9,6 @@ import { createBrowserClient } from "@supabase/ssr";
  * Tidak perlu disimpan sebagai singleton — @supabase/ssr sudah menangani de-duplikasi.
  */
 export function createClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-  );
+  const { supabaseUrl, supabaseKey } = getSupabaseEnv();
+  return createBrowserClient(supabaseUrl, supabaseKey);
 }

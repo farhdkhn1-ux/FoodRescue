@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Food Rescue — Marketplace Penyelamatan Makanan Berlebih",
+  title: "Food Rescue — Food Waste to Animal Feed",
   description:
-    "Platform marketplace untuk mengurangi pemborosan makanan dengan menghubungkan penjual dan pembeli.",
+    "Platform sirkular yang menghubungkan restoran, katering, pasar, dan produsen pangan dengan peternak untuk pemanfaatan bahan pangan berlebih sebagai pakan ternak berkualitas.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

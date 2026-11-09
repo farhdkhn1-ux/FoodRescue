@@ -5,6 +5,7 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { FoodItem, Category } from "@/lib/types/food";
+import { formatShortDateWIB } from "@/lib/utils/format";
 
 type SortOption = "newest" | "expiring_soon" | "price_asc" | "price_desc";
 
@@ -20,6 +21,8 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedType, setSelectedType] = useState<string>("all");
   const [selectedMethod, setSelectedMethod] = useState<string>("all");
+  const [selectedCondition, setSelectedCondition] = useState<string>("all");
+  const [selectedLivestock, setSelectedLivestock] = useState<string>("all");
   const [onlyAvailable, setOnlyAvailable] = useState<boolean>(true);
   const [sortBy, setSortBy] = useState<SortOption>("newest");
 
@@ -112,22 +115,9 @@ export default function Home() {
     return diffHours > 0 && diffHours <= 3;
   }
 
-  // Format tanggal & jam ramah Indonesia
+  // Format tanggal & jam ramah Indonesia (WIB)
   function formatDateTime(dateStr?: string | null): string {
-    if (!dateStr) return "-";
-    try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return dateStr;
-      return new Intl.DateTimeFormat("id-ID", {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(d);
-    } catch {
-      return dateStr;
-    }
+    return formatShortDateWIB(dateStr);
   }
 
   // Filter & Urutkan Makanan
@@ -147,7 +137,7 @@ export default function Home() {
           if (String(food.category_id) !== selectedCategory) return false;
         }
 
-        // 3. Filter Jenis Makanan (Beli vs Donasi)
+        // 3. Filter Jenis Penawaran (Beli vs Donasi)
         if (selectedType !== "all") {
           if (food.type !== selectedType) return false;
         }
@@ -159,7 +149,20 @@ export default function Home() {
           }
         }
 
-        // 5. Filter Hanya Tersedia & Belum Kedaluwarsa
+        // 5. Filter Kondisi Bahan Pakan
+        if (selectedCondition !== "all") {
+          if (food.condition !== selectedCondition) return false;
+        }
+
+        // 6. Filter Target Ternak
+        if (selectedLivestock !== "all") {
+          const livestockText = (food.target_livestock || "").toLowerCase();
+          if (!livestockText.includes(selectedLivestock.toLowerCase())) {
+            return false;
+          }
+        }
+
+        // 7. Filter Hanya Tersedia & Belum Kedaluwarsa
         if (onlyAvailable) {
           const expired = isFoodExpired(food.available_until);
           const hasStock = food.quantity > 0;
@@ -187,7 +190,7 @@ export default function Home() {
         return dateB - dateA;
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [foods, searchQuery, selectedCategory, selectedType, selectedMethod, onlyAvailable, sortBy, currentTime]);
+  }, [foods, searchQuery, selectedCategory, selectedType, selectedMethod, selectedCondition, selectedLivestock, onlyAvailable, sortBy, currentTime]);
 
   // Reset semua filter
   function handleResetFilters() {
@@ -195,6 +198,8 @@ export default function Home() {
     setSelectedCategory("all");
     setSelectedType("all");
     setSelectedMethod("all");
+    setSelectedCondition("all");
+    setSelectedLivestock("all");
     setOnlyAvailable(false);
     setSortBy("newest");
   }
@@ -204,6 +209,8 @@ export default function Home() {
     selectedCategory !== "all" ||
     selectedType !== "all" ||
     selectedMethod !== "all" ||
+    selectedCondition !== "all" ||
+    selectedLivestock !== "all" ||
     onlyAvailable ||
     sortBy !== "newest";
 
@@ -228,20 +235,19 @@ export default function Home() {
                 <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" />
                 <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" />
               </svg>
-              <span>Gerakan Penyelamatan Makanan Berlebih</span>
+              <span>Platform Sirkular • Food Waste to Animal Feed</span>
             </div>
 
             {/* Headline */}
             <h1 className="mt-5 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl md:text-5xl">
-              Selamatkan Makanan Lezat,{" "}
-              <span className="text-emerald-600">Cegah Pemborosan</span>
+              Ubah Bahan Pangan Berlebih Menjadi{" "}
+              <span className="text-emerald-600">Pakan Ternak Berkualitas</span>
             </h1>
 
             {/* Subhead */}
             <p className="mt-3.5 text-base leading-relaxed text-slate-600 sm:text-lg">
-              Hubungkan bisnis makanan berlebih dengan pembeli secara langsung.
-              Dapatkan makanan berkualitas tinggi dengan harga hemat atau donasi gratis
-              sekaligus mengurangi jejak limbah makanan.
+              Hubungkan restoran, katering, toko roti, dan pasar dengan peternak serta pengelola pakan ternak.
+              Manfaatkan kembali limbah organik dan sisa bahan pangan untuk efisiensi peternakan berkelanjutan.
             </p>
 
             {/* Search Box Terintegrasi di Hero */}
@@ -268,7 +274,7 @@ export default function Home() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Cari makanan berlebih, roti, sayuran, paket donasi..."
+                  placeholder="Cari ampas tahu, sisa sayur pasar, ampas kelapa, sisa roti, pakan sapi..."
                   className="w-full rounded-2xl border border-slate-300 bg-white py-3.5 pl-11 pr-11 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-all focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
                 {searchQuery && (
@@ -295,7 +301,7 @@ export default function Home() {
                 href="#katalog"
                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-white shadow-xs hover:bg-emerald-700 transition-colors"
               >
-                <span>Jelajahi Katalog</span>
+                <span>Jelajahi Bahan Pakan</span>
                 <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
                   <path
                     fillRule="evenodd"
@@ -308,7 +314,13 @@ export default function Home() {
                 href="/register?role=seller"
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2 text-slate-700 hover:border-emerald-400 hover:text-emerald-700 transition-colors shadow-2xs"
               >
-                <span>Daftar Sebagai Mitra Penjual</span>
+                <span>Daftar Sumber Bahan (Seller)</span>
+              </Link>
+              <Link
+                href="/register?role=buyer"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2 text-slate-700 hover:border-emerald-400 hover:text-emerald-700 transition-colors shadow-2xs"
+              >
+                <span>Daftar Peternak (Buyer)</span>
               </Link>
             </div>
           </div>
@@ -321,13 +333,13 @@ export default function Home() {
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-emerald-600">
-              Katalog Marketplace W4
+              Katalog Pakan Ternak Berkelanjutan
             </span>
             <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
-              Makanan Siap Selamatkan Hari Ini
+              Bahan Pakan Siap Disalurkan Hari Ini
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              Menampilkan {filteredFoods.length} menu makanan dari total {foods.length} menu terdaftar.
+              Menampilkan {filteredFoods.length} komoditas pakan dari total {foods.length} komoditas terdaftar.
             </p>
           </div>
 
@@ -415,8 +427,8 @@ export default function Home() {
           <div className="h-px bg-slate-100" />
 
           {/* Baris 2: Dropdown Filter & Sortir */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* Filter Jenis Makanan */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+            {/* Filter Jenis Penawaran */}
             <div>
               <label htmlFor="filter-type" className="block text-xs font-bold text-slate-600 mb-1">
                 Jenis Penawaran
@@ -428,8 +440,49 @@ export default function Home() {
                 className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-2xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
               >
                 <option value="all">Semua Jenis (Beli & Donasi)</option>
-                <option value="sale">Hanya Makanan Beli (Komersial)</option>
-                <option value="donation">Hanya Donasi Gratis</option>
+                <option value="sale">Bahan Komersial (Beli)</option>
+                <option value="donation">Donasi Gratis Peternak</option>
+              </select>
+            </div>
+
+            {/* Filter Kondisi Bahan Pakan */}
+            <div>
+              <label htmlFor="filter-condition" className="block text-xs font-bold text-slate-600 mb-1">
+                Kondisi Bahan
+              </label>
+              <select
+                id="filter-condition"
+                value={selectedCondition}
+                onChange={(e) => setSelectedCondition(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-2xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              >
+                <option value="all">Semua Kondisi</option>
+                <option value="layak">Segar / Layak Pakan</option>
+                <option value="fermentasi">Bahan Fermentasi</option>
+                <option value="kering">Bahan Kering</option>
+                <option value="basah">Bahan Basah / Bubur</option>
+                <option value="afkir">Afkir / Olahan</option>
+              </select>
+            </div>
+
+            {/* Filter Target Ternak */}
+            <div>
+              <label htmlFor="filter-livestock" className="block text-xs font-bold text-slate-600 mb-1">
+                Target Ternak
+              </label>
+              <select
+                id="filter-livestock"
+                value={selectedLivestock}
+                onChange={(e) => setSelectedLivestock(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-2xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              >
+                <option value="all">Semua Jenis Ternak</option>
+                <option value="sapi">Sapi / Ruminansia</option>
+                <option value="kambing">Kambing / Domba</option>
+                <option value="unggas">Unggas (Ayam / Bebek)</option>
+                <option value="ikan">Ikan / Akuakultur</option>
+                <option value="babi">Ternak Babi</option>
+                <option value="maggot">Larva Maggot (BSF)</option>
               </select>
             </div>
 
@@ -445,8 +498,8 @@ export default function Home() {
                 className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-2xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
               >
                 <option value="all">Semua Metode</option>
-                <option value="pickup">Ambil di Tempat (Pickup)</option>
-                <option value="delivery">Pengantaran (Delivery)</option>
+                <option value="pickup">Ambil Sendiri (Pickup)</option>
+                <option value="delivery">Pengantaran Kurir (Delivery)</option>
               </select>
             </div>
 
@@ -477,7 +530,7 @@ export default function Home() {
                   onChange={(e) => setOnlyAvailable(e.target.checked)}
                   className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                 />
-                <span>Hanya yang Siap Diambil</span>
+                <span>Hanya Siap Diambil</span>
               </label>
             </div>
           </div>
@@ -495,6 +548,16 @@ export default function Home() {
                 {selectedCategory !== "all" && (
                   <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-slate-700">
                     Kategori: {categories.find((c) => String(c.id) === selectedCategory)?.name}
+                  </span>
+                )}
+                {selectedCondition !== "all" && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-slate-700 capitalize">
+                    Kondisi: {selectedCondition}
+                  </span>
+                )}
+                {selectedLivestock !== "all" && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-slate-700 capitalize">
+                    Ternak: {selectedLivestock}
                   </span>
                 )}
                 {selectedType !== "all" && (
@@ -620,7 +683,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* State: Grid Daftar Makanan */}
+        {/* State: Grid Daftar Bahan Pakan */}
         {!loading && !error && filteredFoods.length > 0 && (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {filteredFoods.map((food) => {
@@ -636,7 +699,7 @@ export default function Home() {
                   key={food.id}
                   className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs transition-all hover:border-emerald-300 hover:shadow-md"
                 >
-                  {/* Foto Makanan */}
+                  {/* Foto Bahan Pakan */}
                   <div className="relative h-48 w-full overflow-hidden bg-slate-100">
                     {food.image_url ? (
                       <img
@@ -670,20 +733,20 @@ export default function Home() {
                     <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2 pointer-events-none">
                       {/* Badge Kategori */}
                       <span className="inline-flex items-center rounded-lg bg-white/90 backdrop-blur-xs px-2.5 py-1 text-[11px] font-bold text-slate-800 shadow-2xs">
-                        {food.categories?.name || "Kategori"}
+                        {food.categories?.name || "Bahan Pakan"}
                       </span>
 
-                      {/* Badge Tipe: Donasi / Beli */}
+                      {/* Badge Tipe: Donasi / Komersial */}
                       {isDonation ? (
                         <span className="inline-flex items-center gap-1 rounded-lg bg-amber-500/90 text-white backdrop-blur-xs px-2.5 py-1 text-[11px] font-extrabold shadow-2xs">
                           <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
                             <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                           </svg>
-                          Donasi Gratis
+                          Donasi Peternak
                         </span>
                       ) : (
                         <span className="inline-flex items-center rounded-lg bg-emerald-600/90 text-white backdrop-blur-xs px-2.5 py-1 text-[11px] font-bold shadow-2xs">
-                          Hemat Pangan
+                          Bahan Komersial
                         </span>
                       )}
                     </div>
@@ -740,7 +803,7 @@ export default function Home() {
                               d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"
                             />
                           </svg>
-                          Stok: <strong className="text-slate-900">{food.quantity}</strong> porsi
+                          Stok: <strong className="text-slate-900">{food.quantity}</strong> {food.unit || "kg"}
                         </span>
                       </div>
 
@@ -750,24 +813,49 @@ export default function Home() {
                           {food.name}
                         </h3>
                         <p className="mt-1 text-xs text-slate-500 line-clamp-2 leading-relaxed">
-                          {food.description || "Tidak ada deskripsi tambahan untuk makanan ini."}
+                          {food.description || "Bahan pakan organik berlebih siap disalurkan ke peternak."}
                         </p>
                       </Link>
 
+                      {/* Badges Kondisi & Target Ternak */}
+                      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                        {food.condition && (
+                          <span className="inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-800">
+                            Kondisi:{" "}
+                            {food.condition === "layak" || food.condition === "segar"
+                              ? "Segar / Layak"
+                              : food.condition === "fermentasi"
+                              ? "Fermentasi"
+                              : food.condition === "kering"
+                              ? "Kering"
+                              : food.condition === "basah"
+                              ? "Basah / Bubur"
+                              : food.condition === "afkir"
+                              ? "Afkir / Olahan"
+                              : food.condition}
+                          </span>
+                        )}
+                        {food.target_livestock && (
+                          <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                            Ternak: {food.target_livestock}
+                          </span>
+                        )}
+                      </div>
+
                       {/* Info Metode & Waktu Ketersediaan */}
-                      <div className="mt-3.5 space-y-1.5 rounded-xl bg-slate-50 p-2.5 text-[11px] text-slate-600 border border-slate-100">
+                      <div className="mt-3 space-y-1.5 rounded-xl bg-slate-50 p-2.5 text-[11px] text-slate-600 border border-slate-100">
                         <div className="flex items-center justify-between">
                           <span className="text-slate-400">Pengambilan:</span>
                           <span className="font-semibold text-slate-700">
                             {food.pickup_method === "pickup"
-                              ? "Ambil di Tempat"
+                              ? "Peternak Ambil Sendiri"
                               : food.pickup_method === "delivery"
-                              ? "Pengantaran"
+                              ? "Pengantaran Kurir"
                               : "Pickup & Delivery"}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-slate-400">Batas Waktu:</span>
+                          <span className="text-slate-400">Batas Pengambilan:</span>
                           <span
                             className={`font-semibold ${
                               expired
@@ -787,17 +875,24 @@ export default function Home() {
                     <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-3.5">
                       <div>
                         <span className="block text-[10px] uppercase tracking-wider text-slate-400 font-bold">
-                          {isDonation ? "Nilai Donasi" : "Harga Penyelamatan"}
+                          {isDonation ? "Nilai Pakan" : "Harga Satuan"}
                         </span>
-                        <span
-                          className={`text-lg font-extrabold ${
-                            isDonation ? "text-emerald-700" : "text-emerald-600"
-                          }`}
-                        >
-                          {isDonation
-                            ? "GRATIS"
-                            : `Rp ${Number(food.price).toLocaleString("id-ID")}`}
-                        </span>
+                        <div className="flex items-baseline gap-1">
+                          <span
+                            className={`text-lg font-extrabold ${
+                              isDonation ? "text-emerald-700" : "text-emerald-600"
+                            }`}
+                          >
+                            {isDonation
+                              ? "GRATIS"
+                              : `Rp ${Number(food.price).toLocaleString("id-ID")}`}
+                          </span>
+                          {!isDonation && (
+                            <span className="text-xs text-slate-500 font-medium">
+                              /{food.unit || "kg"}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <Link
@@ -814,7 +909,7 @@ export default function Home() {
                         {isAvailable
                           ? isDonation
                             ? "Ajukan Donasi"
-                            : "Pesan & Ambil"
+                            : "Ajukan Pakan"
                           : "Lihat Detail"}
                       </Link>
                     </div>
@@ -825,6 +920,18 @@ export default function Home() {
           </div>
         )}
       </main>
+
+      {/* Footer Berkelanjutan */}
+      <footer className="border-t border-slate-200/80 bg-white py-8 dark:border-slate-800 dark:bg-slate-900 mt-auto">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-slate-800 dark:text-white">Food Rescue</span>
+            <span>•</span>
+            <span className="text-emerald-600 font-medium">Food Waste to Animal Feed</span>
+          </div>
+          <p>© 2026 Food Rescue. Solusi Sirkular Penyelamatan Limbah Pangan untuk Pakan Ternak Berkelanjutan.</p>
+        </div>
+      </footer>
     </div>
   );
 }

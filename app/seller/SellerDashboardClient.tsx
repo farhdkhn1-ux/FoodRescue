@@ -13,6 +13,9 @@ import {
   toggleFoodStatusAction,
   deleteFoodAction,
 } from "./actions";
+import { formatAvailabilityWIB } from "@/lib/utils/format";
+import SellerStoreProfileCard from "@/components/SellerStoreProfileCard";
+import type { UserLocationData } from "@/app/actions/location";
 
 interface SellerDashboardClientProps {
   initialFoods: FoodItem[];
@@ -20,7 +23,7 @@ interface SellerDashboardClientProps {
   userEmail: string;
   userId: string;
   userRole: string;
-  sellerAddress?: string | null;
+  initialStoreProfile?: UserLocationData;
   initialOrders?: Order[];
 }
 
@@ -35,19 +38,7 @@ function toDatetimeLocal(d: Date): string {
 }
 
 function formatAvailabilityDate(dateStr?: string | null): string {
-  if (!dateStr) return "-";
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return new Intl.DateTimeFormat("id-ID", {
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(d);
-  } catch {
-    return dateStr;
-  }
+  return formatAvailabilityWIB(dateStr);
 }
 
 export default function SellerDashboardClient({
@@ -56,17 +47,31 @@ export default function SellerDashboardClient({
   userEmail,
   userId,
   userRole,
-  sellerAddress,
+  initialStoreProfile,
   initialOrders = [],
 }: SellerDashboardClientProps) {
   const router = useRouter();
   const [foods, setFoods] = useState<FoodItem[]>(initialFoods);
+  const [storeProfile, setStoreProfile] = useState<UserLocationData>(
+    initialStoreProfile || {
+      store_name: null,
+      phone: null,
+      address: null,
+      latitude: null,
+      longitude: null,
+      is_location_complete: false,
+    }
+  );
   const [isPending, startTransition] = useTransition();
 
-  // Tab state (Katalog Makanan vs Pesanan Masuk)
+  // Tab state (Katalog Bahan Pakan vs Pesanan Masuk vs Profil Toko)
   const pendingOrdersCount = (initialOrders || []).filter((o) => o.status === "pending").length;
-  const [activeTab, setActiveTab] = useState<"inventory" | "orders">(
-    pendingOrdersCount > 0 ? "orders" : "inventory"
+  const [activeTab, setActiveTab] = useState<"inventory" | "orders" | "profile">(
+    !initialStoreProfile?.is_location_complete
+      ? "profile"
+      : pendingOrdersCount > 0
+      ? "orders"
+      : "inventory"
   );
 
   // Filter state
@@ -139,10 +144,20 @@ export default function SellerDashboardClient({
 
   // Buka modal tambah dengan default nilai tanggal
   function openAddModal() {
+    if (!storeProfile.is_location_complete) {
+      setActiveTab("profile");
+      setFeedback({
+        type: "error",
+        message:
+          "Perhatian: Anda wajib melengkapi Nama Toko, Alamat Lengkap, dan Titik Koordinat GPS pada tab 'Profil Toko & Lokasi' sebelum dapat menerbitkan bahan pakan ternak baru.",
+      });
+      return;
+    }
+
     const now = new Date();
     const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
     setAddType("sale");
-    setAddPrice(10000);
+    setAddPrice(2000);
     setAddAvailableFrom(toDatetimeLocal(now));
     setAddAvailableUntil(toDatetimeLocal(in24h));
     setAddImageMode("file");
@@ -389,9 +404,9 @@ export default function SellerDashboardClient({
           </h1>
           <p className="mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
             Akun: <span className="font-semibold text-slate-700 dark:text-slate-300">{userEmail}</span> (ID: {userId.slice(0, 8)}...).
-            {sellerAddress && (
+            {storeProfile?.address && (
               <span className="block mt-0.5 text-slate-600 dark:text-slate-400">
-                Lokasi Toko: <strong className="text-slate-800 dark:text-slate-200">{sellerAddress}</strong>
+                Lokasi Toko: <strong className="text-slate-800 dark:text-slate-200">{storeProfile.address}</strong>
               </span>
             )}
           </p>
@@ -417,12 +432,34 @@ export default function SellerDashboardClient({
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
-            <span>Tambah Makanan Baru</span>
+            <span>Tambah Bahan Pakan</span>
           </button>
         </div>
       </div>
 
-      {/* Navigasi Tab: Inventaris Makanan vs Manajemen Pesanan Masuk */}
+      {/* Peringatan Kelengkapan Profil Toko & Lokasi (Wajib W6) */}
+      {!storeProfile.is_location_complete && (
+        <div className="mt-6 rounded-2xl border border-amber-300 bg-amber-50/90 p-4 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <span className="text-xl">⚠️</span>
+            <div>
+              <strong className="font-bold text-sm block">Profil Toko & Titik Penjemputan Belum Lengkap!</strong>
+              <p className="mt-0.5 text-[11px] text-amber-800 dark:text-amber-300">
+                Anda wajib mengisi Nama Toko, Alamat Lengkap, dan Titik Koordinat GPS di tab &quot;Profil Toko &amp; Lokasi&quot; agar peternak dapat melihat lokasi penjemputan bahan pakan.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab("profile")}
+            className="inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-700 shadow-2xs shrink-0 transition-colors"
+          >
+            Lengkapi Profil Toko Sekarang →
+          </button>
+        </div>
+      )}
+
+      {/* Navigasi Tab: Bahan Pakan vs Pengajuan Masuk vs Profil Toko */}
       <div className="mt-6 flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
         <button
           type="button"
@@ -436,7 +473,7 @@ export default function SellerDashboardClient({
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
           </svg>
-          <span>Katalog Makanan Toko ({foods.length})</span>
+          <span>Bahan Pakan Saya ({foods.length})</span>
         </button>
 
         <button
@@ -451,10 +488,10 @@ export default function SellerDashboardClient({
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
           </svg>
-          <span>Pesanan Masuk</span>
+          <span>Pengajuan Peternak</span>
           {pendingOrdersCount > 0 ? (
             <span className="rounded-full bg-amber-500 text-white px-2 py-0.5 text-[10px] font-black animate-pulse">
-              {pendingOrdersCount} Perlu Diproses
+              {pendingOrdersCount} Perlu Dikonfirmasi
             </span>
           ) : (
             <span className="text-[11px] opacity-75 font-normal">
@@ -462,9 +499,41 @@ export default function SellerDashboardClient({
             </span>
           )}
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("profile")}
+          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all relative ${
+            activeTab === "profile"
+              ? "bg-emerald-600 text-white shadow-xs"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+          }`}
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span>Profil Toko &amp; Lokasi</span>
+          {!storeProfile.is_location_complete && (
+            <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
+          )}
+        </button>
       </div>
 
-      {activeTab === "orders" ? (
+      {activeTab === "profile" ? (
+        <div className="mt-6">
+          <SellerStoreProfileCard
+            initialProfile={storeProfile}
+            onProfileUpdated={(updated) => {
+              setStoreProfile(updated);
+              setFeedback({
+                type: "success",
+                message: "Profil toko dan titik penjemputan berhasil diperbarui!",
+              });
+            }}
+          />
+        </div>
+      ) : activeTab === "orders" ? (
         <div className="mt-6">
           <SellerOrdersManager initialOrders={initialOrders} />
         </div>
@@ -542,13 +611,13 @@ export default function SellerDashboardClient({
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block">
-            Total Porsi Aktif
+            Total Stok Bahan Aktif
           </span>
           <p className="mt-1 text-2xl font-black text-sky-600 dark:text-sky-400">
             {totalPortions}
           </p>
           <span className="text-[11px] text-slate-500 dark:text-slate-400">
-            Porsi tersedia di etalase
+            Bahan pakan siap diambil peternak
           </span>
         </div>
       </div>
@@ -683,9 +752,9 @@ export default function SellerDashboardClient({
                         </div>
                       )}
 
-                      {/* Badge Tipe & Kategori di atas foto */}
-                      <div className="absolute top-2 left-2 flex flex-wrap gap-1">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/90 dark:bg-slate-900/90 text-slate-800 dark:text-slate-200 shadow-2xs backdrop-blur-xs">
+                      {/* Badge Tipe, Kategori & Kondisi di atas foto */}
+                      <div className="absolute top-2 left-2 flex flex-wrap gap-1 max-w-[90%]">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/95 dark:bg-slate-900/95 text-slate-800 dark:text-slate-200 shadow-2xs backdrop-blur-xs">
                           {food.categories?.name || "Kategori #" + food.category_id}
                         </span>
                         <span
@@ -693,7 +762,30 @@ export default function SellerDashboardClient({
                             isDonation ? "bg-purple-600" : "bg-emerald-600"
                           }`}
                         >
-                          {isDonation ? "Donasi Gratis" : "Dijual Murah"}
+                          {isDonation ? "Donasi Gratis" : "Dijual"}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold shadow-2xs backdrop-blur-xs ${
+                            food.condition === "layak" || food.condition === "segar"
+                              ? "bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300"
+                              : food.condition === "fermentasi"
+                              ? "bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950 dark:text-amber-300"
+                              : food.condition === "kering"
+                              ? "bg-sky-100 text-sky-800 border border-sky-300 dark:bg-sky-950 dark:text-sky-300"
+                              : food.condition === "basah"
+                              ? "bg-blue-100 text-blue-800 border border-blue-300 dark:bg-blue-950 dark:text-blue-300"
+                              : "bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-950 dark:text-rose-300"
+                          }`}
+                        >
+                          {food.condition === "layak" || food.condition === "segar"
+                            ? "Segar / Layak Pakan"
+                            : food.condition === "fermentasi"
+                            ? "Bahan Fermentasi"
+                            : food.condition === "kering"
+                            ? "Bahan Kering"
+                            : food.condition === "basah"
+                            ? "Bahan Basah / Bubur"
+                            : "Afkir / Olahan"}
                         </span>
                       </div>
                     </div>
@@ -731,9 +823,16 @@ export default function SellerDashboardClient({
                       {food.description}
                     </p>
 
-                    {/* Waktu Ketersediaan */}
+                    {/* Target Ternak & Waktu Ketersediaan */}
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-teal-50 px-2 py-0.5 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300 border border-teal-200/60 dark:border-teal-900">
+                        <span>Ternak:</span>
+                        <strong>{food.target_livestock || "Semua Ternak"}</strong>
+                      </span>
+                    </div>
+
                     {food.available_until && (
-                      <div className="mt-2.5 flex items-center gap-1.5 text-[11px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-1 rounded-lg border border-amber-200/60 dark:border-amber-900/40">
+                      <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-1 rounded-lg border border-amber-200/60 dark:border-amber-900/40">
                         <svg
                           className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
                           fill="none"
@@ -750,12 +849,12 @@ export default function SellerDashboardClient({
                     )}
 
                     {/* Tags: Metode Pengambilan */}
-                    <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px]">
+                    <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
                       <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                         {food.pickup_method === "pickup"
-                          ? "Ambil di Tempat"
+                          ? "Ambil di Toko"
                           : food.pickup_method === "delivery"
-                          ? "Antar Kurir"
+                          ? "Antar ke Peternakan"
                           : "Ambil / Antar"}
                       </span>
                       {userRole === "admin" && (
@@ -770,13 +869,13 @@ export default function SellerDashboardClient({
                   <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
                     <div>
                       <span className="block text-[10px] uppercase font-semibold text-slate-400">
-                        {isDonation ? "Bebas Biaya" : "Harga Satuan"}
+                        {isDonation ? "Bebas Biaya" : `Harga / ${food.unit || "kg"}`}
                       </span>
                       <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">
                         {isDonation ? "Rp 0" : `Rp ${Number(food.price).toLocaleString("id-ID")}`}
                       </span>
                       <span className="block text-[11px] text-slate-500">
-                        Sisa: <strong>{food.quantity}</strong> porsi
+                        Jumlah: <strong>{food.quantity}</strong> {food.unit || "kg"}
                       </span>
                     </div>
 
@@ -896,8 +995,8 @@ export default function SellerDashboardClient({
                 </div>
               </div>
 
-              {/* Harga & Jumlah Porsi */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Harga, Jumlah & Satuan Bahan Pakan */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Harga Satuan (Rp) <span className="text-red-500">*</span>
@@ -914,27 +1013,93 @@ export default function SellerDashboardClient({
                   />
                   {addType === "donation" && (
                     <span className="text-[11px] text-purple-600 dark:text-purple-400 mt-0.5 block">
-                      Makanan donasi otomatis bernilai Rp 0.
+                      Donasi pakan bernilai Rp 0.
                     </span>
                   )}
                 </div>
 
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Jumlah Porsi Tersedia <span className="text-red-500">*</span>
+                    Jumlah Bahan <span className="text-red-500">*</span>
                   </label>
                   <input
                     name="quantity"
                     type="number"
                     min="1"
-                    defaultValue="10"
+                    defaultValue="50"
                     required
                     className="w-full rounded-xl border border-slate-200 dark:border-slate-800 px-3 py-2 bg-slate-50 dark:bg-slate-950 outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-200"
                   />
-                  <span className="text-[11px] text-slate-400 mt-0.5 block">
-                    Bilangan bulat positif (minimal 1 porsi).
-                  </span>
                 </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Satuan <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="unit"
+                    defaultValue="kg"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-800 px-3 py-2 bg-slate-50 dark:bg-slate-950 outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-200"
+                  >
+                    <option value="kg">Kilogram (kg)</option>
+                    <option value="karung">Karung</option>
+                    <option value="ember">Ember / Drum</option>
+                    <option value="liter">Liter</option>
+                    <option value="gram">Gram</option>
+                    <option value="porsi">Porsi</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Kondisi Bahan Pakan & Rekomendasi Ternak */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Kondisi Bahan Pakan <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="condition"
+                    defaultValue="layak"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-800 px-3 py-2 bg-slate-50 dark:bg-slate-950 outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-200"
+                  >
+                    <option value="layak">Segar / Layak Pakan</option>
+                    <option value="fermentasi">Bahan Fermentasi</option>
+                    <option value="kering">Bahan Kering</option>
+                    <option value="basah">Bahan Basah / Bubur</option>
+                    <option value="afkir">Afkir / Olahan</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Rekomendasi Jenis Ternak
+                  </label>
+                  <select
+                    name="target_livestock"
+                    defaultValue="Semua Ternak"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-800 px-3 py-2 bg-slate-50 dark:bg-slate-950 outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-200"
+                  >
+                    <option value="Semua Ternak">Semua Jenis Ternak</option>
+                    <option value="Unggas (Ayam / Bebek)">Unggas (Ayam / Bebek)</option>
+                    <option value="Ruminansia (Sapi / Kambing / Domba)">Ruminansia (Sapi / Kambing / Domba)</option>
+                    <option value="Ikan / Budidaya Air">Ikan / Budidaya Air</option>
+                    <option value="Babi">Babi</option>
+                    <option value="Lainnya">Lainnya</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Petunjuk Penyimpanan */}
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Petunjuk Penyimpanan / Penanganan Bahan Pakan
+                </label>
+                <textarea
+                  name="storage_instructions"
+                  rows={2}
+                  placeholder="Contoh: Simpan di tempat teduh dan berventilasi. Sebaiknya difermentasi atau diolah dalam 24 jam."
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 px-3 py-2 bg-slate-50 dark:bg-slate-950 outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-200 resize-none"
+                />
               </div>
 
               {/* Batas Waktu Ketersediaan (available_from & available_until) */}
@@ -980,9 +1145,9 @@ export default function SellerDashboardClient({
                   <option value="delivery">Diantar oleh Kurir (Delivery)</option>
                   <option value="both">Keduanya (Bisa Ambil / Diantar)</option>
                 </select>
-                {sellerAddress ? (
+                {storeProfile?.address ? (
                   <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                    Alamat toko terdaftar: <span className="font-semibold">{sellerAddress}</span>.
+                    Alamat toko terdaftar: <span className="font-semibold">{storeProfile.address}</span>.
                   </p>
                 ) : (
                   <p className="mt-1 text-[11px] text-slate-400">
@@ -1156,10 +1321,10 @@ export default function SellerDashboardClient({
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                  Edit Menu Makanan #{editingFood.id}
+                  Edit Bahan Pakan Ternak #{editingFood.id}
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Perbarui informasi porsi, batas waktu, atau harga makanan.
+                  Perbarui informasi stok, batas waktu pengambilan, atau harga pakan.
                 </p>
               </div>
               <button
@@ -1230,7 +1395,8 @@ export default function SellerDashboardClient({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Harga, Jumlah & Satuan Bahan Pakan */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Harga Satuan (Rp) <span className="text-red-500">*</span>
@@ -1249,7 +1415,7 @@ export default function SellerDashboardClient({
 
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Jumlah Porsi Tersedia <span className="text-red-500">*</span>
+                    Jumlah Bahan <span className="text-red-500">*</span>
                   </label>
                   <input
                     name="quantity"
@@ -1260,6 +1426,76 @@ export default function SellerDashboardClient({
                     className="w-full rounded-xl border border-slate-200 dark:border-slate-800 px-3 py-2 bg-slate-50 dark:bg-slate-950 outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-200"
                   />
                 </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Satuan <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="unit"
+                    defaultValue={editingFood.unit || "kg"}
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-800 px-3 py-2 bg-slate-50 dark:bg-slate-950 outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-200"
+                  >
+                    <option value="kg">Kilogram (kg)</option>
+                    <option value="karung">Karung</option>
+                    <option value="ember">Ember / Drum</option>
+                    <option value="liter">Liter</option>
+                    <option value="gram">Gram</option>
+                    <option value="porsi">Porsi</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Kondisi Bahan Pakan & Rekomendasi Ternak */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Kondisi Bahan Pakan <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="condition"
+                    defaultValue={editingFood.condition || "layak"}
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-800 px-3 py-2 bg-slate-50 dark:bg-slate-950 outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-200"
+                  >
+                    <option value="layak">Segar / Layak Pakan</option>
+                    <option value="fermentasi">Bahan Fermentasi</option>
+                    <option value="kering">Bahan Kering</option>
+                    <option value="basah">Bahan Basah / Bubur</option>
+                    <option value="afkir">Afkir / Olahan</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Rekomendasi Jenis Ternak
+                  </label>
+                  <select
+                    name="target_livestock"
+                    defaultValue={editingFood.target_livestock || "Semua Ternak"}
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-800 px-3 py-2 bg-slate-50 dark:bg-slate-950 outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-200"
+                  >
+                    <option value="Semua Ternak">Semua Jenis Ternak</option>
+                    <option value="Unggas (Ayam / Bebek)">Unggas (Ayam / Bebek)</option>
+                    <option value="Ruminansia (Sapi / Kambing / Domba)">Ruminansia (Sapi / Kambing / Domba)</option>
+                    <option value="Ikan / Budidaya Air">Ikan / Budidaya Air</option>
+                    <option value="Babi">Babi</option>
+                    <option value="Lainnya">Lainnya</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Petunjuk Penyimpanan */}
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Petunjuk Penyimpanan / Penanganan Bahan Pakan
+                </label>
+                <textarea
+                  name="storage_instructions"
+                  rows={2}
+                  defaultValue={editingFood.storage_instructions || ""}
+                  placeholder="Contoh: Simpan di tempat teduh dan berventilasi. Sebaiknya difermentasi atau diolah dalam 24 jam."
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 px-3 py-2 bg-slate-50 dark:bg-slate-950 outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-200 resize-none"
+                />
               </div>
 
               {/* Batas Waktu Ketersediaan */}

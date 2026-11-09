@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { isValidRole } from "@/lib/auth/roles";
 import type { User } from "@supabase/supabase-js";
 import NotificationBell from "./NotificationBell";
+import { NotificationProvider } from "@/lib/context/NotificationContext";
 
 /**
  * Komponen Navbar Responsif Food Rescue
@@ -179,11 +180,11 @@ export default function Navbar() {
       case "admin":
         return { href: "/admin", label: "Area Admin" };
       case "seller":
-        return { href: "/seller", label: "Area Seller" };
+        return { href: "/seller", label: "Area Sumber Bahan" };
       case "buyer":
-        return { href: "/buyer", label: "Area Buyer" };
+        return { href: "/buyer", label: "Area Peternak" };
       case "courier":
-        return { href: "/courier", label: "Area Kurir" };
+        return { href: "/courier", label: "Area Kurir Pakan" };
       default:
         return null;
     }
@@ -195,7 +196,8 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200/80 bg-white/90 backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-900/90 transition-colors">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <NotificationProvider userId={user?.id || null}>
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Brand / Logo */}
         <Link
           href="/"
@@ -222,8 +224,8 @@ export default function Navbar() {
             <span className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
               Food<span className="text-emerald-600 dark:text-emerald-400">Rescue</span>
             </span>
-            <span className="text-[10px] font-medium uppercase tracking-wider text-emerald-700 dark:text-emerald-300 -mt-1 hidden sm:inline">
-              Marketplace
+            <span className="text-[10px] font-semibold tracking-wider text-emerald-700 dark:text-emerald-300 -mt-1 hidden sm:inline">
+              Waste to Animal Feed
             </span>
           </div>
         </Link>
@@ -244,7 +246,7 @@ export default function Navbar() {
             href="/#katalog"
             className="text-sm font-medium text-slate-600 transition-colors hover:text-emerald-600 dark:text-slate-300 dark:hover:text-emerald-400"
           >
-            Jelajahi Makanan
+            Katalog Bahan Pakan
           </Link>
           {roleLink && (
             <Link
@@ -481,7 +483,7 @@ export default function Navbar() {
                   d="M13.5 21v-7.5a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75V21m-4.5 0H2.25A2.25 2.25 0 0 1 0 18.75V5.25A2.25 2.25 0 0 1 2.25 3h19.5A2.25 2.25 0 0 1 24 5.25v13.5A2.25 2.25 0 0 1 21.75 21H13.5Z"
                 />
               </svg>
-              <span>Jelajahi Makanan</span>
+              <span>Katalog Bahan Pakan</span>
             </Link>
             {roleLink && (
               <Link
@@ -611,6 +613,7 @@ export default function Navbar() {
           </div>
         </div>
       )}
+      </NotificationProvider>
     </header>
   );
 }

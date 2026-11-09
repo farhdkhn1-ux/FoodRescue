@@ -14,6 +14,8 @@ interface RawOrderItem {
   subtotal: number;
   foods?: {
     name: string;
+    unit?: string | null;
+    condition?: string | null;
   } | null;
 }
 
@@ -79,7 +81,9 @@ export default async function CourierPage() {
         price,
         subtotal,
         foods (
-          name
+          name,
+          unit,
+          condition
         )
       )
     `)
@@ -106,24 +110,28 @@ export default async function CourierPage() {
     string,
     {
       name: string | null;
+      store_name: string | null;
       address: string | null;
       latitude: number | null;
       longitude: number | null;
+      phone: string | null;
     }
   > = {};
 
   if (sellerIds.length > 0) {
     const { data: sellersData } = await supabase
       .from("users")
-      .select("id, name, address, latitude, longitude")
+      .select("id, name, store_name, address, latitude, longitude, phone")
       .in("id", sellerIds);
 
     (sellersData || []).forEach((s) => {
       sellersMap[s.id] = {
         name: s.name,
+        store_name: s.store_name,
         address: s.address,
         latitude: s.latitude !== null && s.latitude !== undefined ? Number(s.latitude) : null,
         longitude: s.longitude !== null && s.longitude !== undefined ? Number(s.longitude) : null,
+        phone: s.phone,
       };
     });
   }
@@ -143,8 +151,10 @@ export default async function CourierPage() {
       created_at: ro.created_at,
       items: (ro.order_items || []).map((item) => ({
         id: item.id,
-        food_name: item.foods?.name || "Makanan",
+        food_name: item.foods?.name || "Bahan Pakan",
         quantity: item.quantity,
+        unit: item.foods?.unit || "kg",
+        condition: item.foods?.condition || "layak",
         seller_id: item.seller_id,
       })),
       seller_info: sellerInfo || null,
@@ -169,13 +179,13 @@ export default async function CourierPage() {
             >
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
-            <span>Rute Privat Terproteksi • Kurir (Courier)</span>
+            <span>Logistik Pakan Ternak • Kurir (Courier)</span>
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Area Kurir Pengantaran
+            Area Kurir Pengantaran Bahan Pakan
           </h1>
           <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
-            Penjemputan makanan berlebih dari mitra penjual dan pengantaran ke pembeli secara realtime.
+            Penjemputan bahan pakan dari sumber bahan (restoran, pasar, pabrik) dan pengantaran ke peternak secara realtime.
           </p>
         </div>
 

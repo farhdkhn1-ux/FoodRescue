@@ -36,7 +36,7 @@ export default async function AdminPage() {
             Area Administrator
           </h1>
           <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
-            Akses khusus untuk pengelolaan sistem, verifikasi penjual, dan moderasi platform Food Rescue.
+            Akses khusus untuk pengelolaan sistem, verifikasi sumber bahan pangan, peternak, dan moderasi platform Food Rescue (Food Waste to Animal Feed).
           </p>
         </div>
 

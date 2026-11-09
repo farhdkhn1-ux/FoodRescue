@@ -25,6 +25,8 @@ interface RawOrderItem {
     image_url: string | null;
     type: "sale" | "donation";
     pickup_method: "pickup" | "delivery" | "both";
+    unit?: string;
+    condition?: "layak" | "segar" | "fermentasi" | "kering" | "basah" | "afkir";
     categories?: { name: string } | null;
   } | null;
 }
@@ -357,6 +359,8 @@ export async function getBuyerOrdersAction(): Promise<ActionResponse<Order[]>> {
             image_url,
             type,
             pickup_method,
+            unit,
+            condition,
             categories (name)
           )
         )
@@ -367,42 +371,93 @@ export async function getBuyerOrdersAction(): Promise<ActionResponse<Order[]>> {
       return { success: false, error: mapDatabaseError(error), data: [] };
     }
 
+    const rawList = (data as unknown as RawOrder[]) || [];
+
+    // Ambil profil publik toko seller untuk titik penjemputan (Fitur Wajib W6)
+    const sellerIds = Array.from(
+      new Set(
+        rawList
+          .flatMap((o) => (o.order_items || []).map((i) => i.seller_id))
+          .filter(Boolean)
+      )
+    );
+
+    const sellersMap = new Map<string, {
+      id: string;
+      store_name: string;
+      address: string | null;
+      latitude: number | null;
+      longitude: number | null;
+      phone?: string | null;
+    }>();
+
+    if (sellerIds.length > 0) {
+      const { data: sellersData } = await supabase
+        .from("users")
+        .select("id, store_name, address, latitude, longitude, phone")
+        .in("id", sellerIds);
+
+      (sellersData || []).forEach((s) => {
+        sellersMap.set(s.id, {
+          id: s.id,
+          store_name: s.store_name || `Sumber Bahan #${s.id.slice(0, 8)}`,
+          address: s.address || null,
+          latitude: s.latitude !== null && s.latitude !== undefined ? Number(s.latitude) : null,
+          longitude: s.longitude !== null && s.longitude !== undefined ? Number(s.longitude) : null,
+          phone: s.phone || null,
+        });
+      });
+    }
+
     // Transformasi data agar sesuai dengan interface Order
-    const orders: Order[] = ((data as unknown as RawOrder[]) || []).map((raw: RawOrder) => ({
-      id: raw.id,
-      buyer_id: raw.buyer_id,
-      total_amount: Number(raw.total_amount),
-      status: raw.status as OrderStatus,
-      pickup_method: raw.pickup_method,
-      shipping_address: raw.shipping_address,
-      created_at: raw.created_at,
-      updated_at: raw.updated_at,
-      order_items: (raw.order_items || []).map((item: RawOrderItem) => ({
-        id: item.id,
-        order_id: raw.id,
-        food_id: item.food_id,
-        seller_id: item.seller_id,
-        quantity: item.quantity,
-        price: Number(item.price),
-        subtotal: Number(item.subtotal),
-        food: item.foods
-          ? {
-              id: item.foods.id,
-              seller_id: item.seller_id,
-              category_id: 0,
-              name: item.foods.name,
-              description: "",
-              image_url: item.foods.image_url,
-              quantity: item.quantity,
-              price: Number(item.price),
-              type: item.foods.type,
-              pickup_method: item.foods.pickup_method,
-              status: "available",
-              categories: item.foods.categories,
-            }
-          : undefined,
-      })),
-    }));
+    const orders: Order[] = rawList.map((raw: RawOrder) => {
+      const firstSellerId = raw.order_items?.[0]?.seller_id;
+      const primarySeller = firstSellerId ? sellersMap.get(firstSellerId) || null : null;
+
+      return {
+        id: raw.id,
+        buyer_id: raw.buyer_id,
+        total_amount: Number(raw.total_amount),
+        status: raw.status as OrderStatus,
+        pickup_method: raw.pickup_method,
+        shipping_address: raw.shipping_address,
+        created_at: raw.created_at,
+        updated_at: raw.updated_at,
+        seller_info: primarySeller,
+        order_items: (raw.order_items || []).map((item: RawOrderItem) => {
+          const sellerProf = sellersMap.get(item.seller_id) || null;
+          return {
+            id: item.id,
+            order_id: raw.id,
+            food_id: item.food_id,
+            seller_id: item.seller_id,
+            quantity: item.quantity,
+            price: Number(item.price),
+            subtotal: Number(item.subtotal),
+            seller_profile: sellerProf,
+            food: item.foods
+              ? {
+                  id: item.foods.id,
+                  seller_id: item.seller_id,
+                  category_id: 0,
+                  name: item.foods.name,
+                  description: "",
+                  image_url: item.foods.image_url,
+                  quantity: item.quantity,
+                  unit: item.foods.unit || "kg",
+                  condition: item.foods.condition || "layak",
+                  price: Number(item.price),
+                  type: item.foods.type,
+                  pickup_method: item.foods.pickup_method,
+                  status: "available",
+                  categories: item.foods.categories,
+                  seller_profile: sellerProf,
+                }
+              : undefined,
+          };
+        }),
+      };
+    });
 
     return { success: true, data: orders };
   } catch (err) {
@@ -455,6 +510,8 @@ export async function getSellerOrdersAction(): Promise<ActionResponse<Order[]>> 
             image_url,
             type,
             pickup_method,
+            unit,
+            condition,
             categories (name)
           )
         )
@@ -465,41 +522,85 @@ export async function getSellerOrdersAction(): Promise<ActionResponse<Order[]>> 
       return { success: false, error: mapDatabaseError(error), data: [] };
     }
 
-    const orders: Order[] = ((data as unknown as RawOrder[]) || []).map((raw: RawOrder) => ({
-      id: raw.id,
-      buyer_id: raw.buyer_id,
-      total_amount: Number(raw.total_amount),
-      status: raw.status as OrderStatus,
-      pickup_method: raw.pickup_method,
-      shipping_address: raw.shipping_address,
-      created_at: raw.created_at,
-      updated_at: raw.updated_at,
-      order_items: (raw.order_items || []).map((item: RawOrderItem) => ({
-        id: item.id,
-        order_id: raw.id,
-        food_id: item.food_id,
-        seller_id: item.seller_id,
-        quantity: item.quantity,
-        price: Number(item.price),
-        subtotal: Number(item.subtotal),
-        food: item.foods
+    const rawList = (data as unknown as RawOrder[]) || [];
+
+    // Ambil data info pembeli / peternak untuk tujuan delivery
+    const buyerIds = Array.from(new Set(rawList.map((o) => o.buyer_id).filter(Boolean)));
+    const buyersMap = new Map<string, {
+      email?: string | null;
+      phone?: string | null;
+      address?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+    }>();
+
+    if (buyerIds.length > 0) {
+      const { data: buyersData } = await supabase
+        .from("users")
+        .select("id, email, phone, address, latitude, longitude")
+        .in("id", buyerIds);
+
+      (buyersData || []).forEach((b) => {
+        buyersMap.set(b.id, {
+          email: b.email || null,
+          phone: b.phone || null,
+          address: b.address || null,
+          latitude: b.latitude !== null && b.latitude !== undefined ? Number(b.latitude) : null,
+          longitude: b.longitude !== null && b.longitude !== undefined ? Number(b.longitude) : null,
+        });
+      });
+    }
+
+    const orders: Order[] = rawList.map((raw: RawOrder) => {
+      const buyerInfo = buyersMap.get(raw.buyer_id) || null;
+
+      return {
+        id: raw.id,
+        buyer_id: raw.buyer_id,
+        total_amount: Number(raw.total_amount),
+        status: raw.status as OrderStatus,
+        pickup_method: raw.pickup_method,
+        shipping_address: raw.shipping_address,
+        created_at: raw.created_at,
+        updated_at: raw.updated_at,
+        buyer: buyerInfo
           ? {
-              id: item.foods.id,
-              seller_id: item.seller_id,
-              category_id: 0,
-              name: item.foods.name,
-              description: "",
-              image_url: item.foods.image_url,
-              quantity: item.quantity,
-              price: Number(item.price),
-              type: item.foods.type,
-              pickup_method: item.foods.pickup_method,
-              status: "available",
-              categories: item.foods.categories,
+              email: buyerInfo.email,
+              phone: buyerInfo.phone,
+              address: buyerInfo.address,
+              latitude: buyerInfo.latitude,
+              longitude: buyerInfo.longitude,
             }
           : undefined,
-      })),
-    }));
+        order_items: (raw.order_items || []).map((item: RawOrderItem) => ({
+          id: item.id,
+          order_id: raw.id,
+          food_id: item.food_id,
+          seller_id: item.seller_id,
+          quantity: item.quantity,
+          price: Number(item.price),
+          subtotal: Number(item.subtotal),
+          food: item.foods
+            ? {
+                id: item.foods.id,
+                seller_id: item.seller_id,
+                category_id: 0,
+                name: item.foods.name,
+                description: "",
+                image_url: item.foods.image_url,
+                quantity: item.quantity,
+                unit: item.foods.unit || "kg",
+                condition: item.foods.condition || "layak",
+                price: Number(item.price),
+                type: item.foods.type,
+                pickup_method: item.foods.pickup_method,
+                status: "available",
+                categories: item.foods.categories,
+              }
+            : undefined,
+        })),
+      };
+    });
 
     return { success: true, data: orders };
   } catch (err) {

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { calculateDistance, formatDistance } from "@/lib/utils/distance";
+import { formatDateWIB } from "@/lib/utils/format";
 import UserLocationCard from "@/components/UserLocationCard";
 import type { UserLocationData } from "@/app/actions/location";
 
@@ -11,6 +12,8 @@ export interface DeliveryOrderItem {
   id: number;
   food_name: string;
   quantity: number;
+  unit?: string;
+  condition?: string;
   seller_id: string;
 }
 
@@ -25,9 +28,11 @@ export interface DeliveryOrder {
   items: DeliveryOrderItem[];
   seller_info?: {
     name: string | null;
+    store_name?: string | null;
     address: string | null;
     latitude: number | null;
     longitude: number | null;
+    phone?: string | null;
   } | null;
 }
 
@@ -38,18 +43,7 @@ interface CourierDashboardClientProps {
 }
 
 function formatDate(dateStr: string): string {
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return new Intl.DateTimeFormat("id-ID", {
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(d);
-  } catch {
-    return dateStr;
-  }
+  return formatDateWIB(dateStr);
 }
 
 export default function CourierDashboardClient({
@@ -70,8 +64,9 @@ export default function CourierDashboardClient({
   // Listener Realtime Supabase untuk Kurir (W5)
   useEffect(() => {
     const supabase = createClient();
+    const channelName = `courier-deliveries-${Date.now()}`;
     const channel = supabase
-      .channel("courier-deliveries-live")
+      .channel(channelName)
       .on(
         "postgres_changes",
         {
@@ -83,7 +78,11 @@ export default function CourierDashboardClient({
           router.refresh();
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === "CHANNEL_ERROR" && process.env.NODE_ENV !== "production") {
+          console.warn("[Realtime Courier Deliveries] Subscription error:", err?.message);
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -105,7 +104,7 @@ export default function CourierDashboardClient({
       <UserLocationCard
         initialLocation={courierLocation}
         title="Lokasi Posisi Kurir & GPS"
-        description="Gunakan fitur deteksi GPS perangkat Anda untuk menghitung jarak ke toko mitra penjual dan alamat pengantaran pembeli."
+        description="Gunakan fitur deteksi GPS perangkat Anda untuk menghitung jarak ke sumber bahan pakan dan alamat kandang peternak."
         onLocationUpdated={(newLoc) => setCourierLocation(newLoc)}
       />
 
@@ -119,7 +118,7 @@ export default function CourierDashboardClient({
             {activeDeliveries.length}
           </p>
           <span className="mt-1 text-xs text-slate-500 block">
-            Pesanan siap dijemput & diantar
+            Bahan siap dijemput & diantar
           </span>
         </div>
 
@@ -131,7 +130,7 @@ export default function CourierDashboardClient({
             {completedDeliveries.length}
           </p>
           <span className="mt-1 text-xs text-slate-500 block">
-            Total pangan berhasil diselamatkan
+            Total pakan berhasil disalurkan ke peternak
           </span>
         </div>
 
@@ -267,35 +266,44 @@ export default function CourierDashboardClient({
                     </span>
                   </div>
 
-                  {/* Rincian Menu Makanan */}
+                  {/* Rincian Bahan Pakan */}
                   <div className="py-3 border-b border-slate-100 dark:border-slate-800">
                     <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                      Menu Diselamatkan
+                      Bahan Pakan yang Diangkut
                     </span>
-                    <ul className="space-y-1">
+                    <ul className="space-y-1.5">
                       {order.items.map((item) => (
                         <li
                           key={item.id}
-                          className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex justify-between"
+                          className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center justify-between"
                         >
-                          <span>{item.food_name}</span>
-                          <span className="text-slate-500">{item.quantity} porsi</span>
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="truncate">{item.food_name}</span>
+                            {item.condition && (
+                              <span className="text-[10px] text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                                {item.condition}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-slate-600 dark:text-slate-400 shrink-0 font-bold ml-2">
+                            {item.quantity} {item.unit || "kg"}
+                          </span>
                         </li>
                       ))}
                     </ul>
                   </div>
 
-                  {/* Rute Penjemputan & Pengantaran (Fitur Lokasi W5) */}
-                  <div className="py-3 space-y-3">
+                  {/* Rute Penjemputan & Pengantaran (Fitur Lokasi W5 & W6) */}
+                  <div className="py-3 space-y-3.5">
                     {/* Titik Jemput (Seller Shop) */}
                     <div className="flex items-start gap-2.5">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 text-xs font-bold">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 text-xs font-bold mt-0.5">
                         1
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-1">
                           <span className="text-[11px] font-bold text-slate-500 uppercase">
-                            Titik Jemput (Mitra Toko)
+                            Titik Jemput (Sumber Bahan)
                           </span>
                           {distCourierToSeller !== null && (
                             <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
@@ -304,26 +312,65 @@ export default function CourierDashboardClient({
                           )}
                         </div>
                         <p className="text-xs font-semibold text-slate-900 dark:text-white">
-                          {order.seller_info?.name || "Mitra Toko Food Rescue"}
+                          {order.seller_info?.store_name || order.seller_info?.name || "Sumber Bahan Pangan"}
                         </p>
                         <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                           {order.seller_info?.address || "Alamat toko belum dicantumkan."}
                         </p>
+                        {order.seller_info?.latitude && order.seller_info?.longitude && (
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <a
+                              href={`https://www.google.com/maps/search/?api=1&query=${order.seller_info.latitude},${order.seller_info.longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-600 hover:text-sky-700 dark:text-sky-400"
+                            >
+                              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                <polyline points="15 3 21 3 21 9" />
+                                <line x1="10" y1="14" x2="21" y2="3" />
+                              </svg>
+                              <span>Navigasi Titik Jemput Google Maps</span>
+                            </a>
+                            {order.seller_info?.phone && (
+                              <span className="text-[11px] text-slate-400">
+                                • Telp: {order.seller_info.phone}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
 
                     {/* Titik Antar (Buyer Shipping Address) */}
                     <div className="flex items-start gap-2.5">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-bold">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-bold mt-0.5">
                         2
                       </div>
                       <div className="flex-1 min-w-0">
                         <span className="text-[11px] font-bold text-slate-500 uppercase block">
-                          Titik Tujuan (Alamat Pembeli)
+                          Titik Tujuan (Alamat Peternak / Kandang)
                         </span>
                         <p className="text-xs font-semibold text-slate-900 dark:text-white leading-relaxed">
                           {order.shipping_address || "Alamat tidak dicantumkan"}
                         </p>
+                        {order.shipping_address && (
+                          <div className="mt-1.5">
+                            <a
+                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.shipping_address)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
+                            >
+                              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                <polyline points="15 3 21 3 21 9" />
+                                <line x1="10" y1="14" x2="21" y2="3" />
+                              </svg>
+                              <span>Navigasi Tujuan Peternak Google Maps</span>
+                            </a>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

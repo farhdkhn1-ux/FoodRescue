@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSafeInternalRedirect } from "@/lib/auth/redirect";
+import { getSupabaseEnv } from "@/lib/supabase/env";
 
 /**
  * Proxy (pengganti middleware di Next.js 16).
@@ -20,9 +21,10 @@ export async function proxy(request: NextRequest) {
     request,
   });
 
+  const { supabaseUrl, supabaseKey } = getSupabaseEnv();
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    supabaseUrl,
+    supabaseKey,
     {
       cookies: {
         getAll() {
