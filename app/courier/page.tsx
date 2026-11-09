@@ -120,13 +120,13 @@ export default async function CourierPage() {
 
   if (sellerIds.length > 0) {
     const { data: sellersData } = await supabase
-      .from("users")
-      .select("id, name, store_name, address, latitude, longitude, phone")
+      .from("seller_public_profiles")
+      .select("id, store_name, address, latitude, longitude, phone")
       .in("id", sellerIds);
 
     (sellersData || []).forEach((s) => {
       sellersMap[s.id] = {
-        name: s.name,
+        name: s.store_name,
         store_name: s.store_name,
         address: s.address,
         latitude: s.latitude !== null && s.latitude !== undefined ? Number(s.latitude) : null,

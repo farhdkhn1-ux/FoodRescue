@@ -1,26 +1,68 @@
 -- ============================================================================
--- MIGRASI W6: REFACTOR FOOD RESCUE — FOOD WASTE TO ANIMAL FEED
+-- MIGRASI W6 FINAL: REFACTOR FOOD RESCUE — FOOD WASTE TO ANIMAL FEED
 -- Tanggal: 10 November 2026
--- Fokus: Profil Toko & Lokasi Seller (store_name, phone, is_phone_public),
---        Listing Karakteristik Bahan Pakan Ternak (unit, condition, target_livestock, storage_instructions),
---        Public Seller Profile View & RPC Zero-Trust (Masking nomor telepon),
---        Kategori Bahan Pakan Ternak Awal,
---        dan Proteksi Integritas Data Penjemputan
+-- Fokus:
+--   1. Profil Toko & Usaha Seller (store_name, phone, is_phone_public, updated_at)
+--   2. Listing Karakteristik Pakan Ternak (unit, condition, target_livestock, storage_instructions, collected_at)
+--   3. Policy RLS & Proteksi Anti-Eskalasi Role pada public.users
+--   4. Public Seller Profile View & RPC Zero-Trust (Masking nomor telepon)
+--   5. Idempotensi Kategori Bahan Pakan Ternak Awal (ON CONFLICT)
+--   6. Indeks Performa Koordinat Seller & Filter Bahan Pakan
+--   7. Reload PostgREST Schema Cache (Menghilangkan error schema cache di Supabase)
 -- ============================================================================
 
 BEGIN;
 
+-- ----------------------------------------------------------------------------
 -- 1. Penambahan Kolom Profil Toko & Usaha pada Tabel public.users
+-- ----------------------------------------------------------------------------
 ALTER TABLE public.users 
   ADD COLUMN IF NOT EXISTS store_name TEXT,
   ADD COLUMN IF NOT EXISTS phone TEXT,
-  ADD COLUMN IF NOT EXISTS is_phone_public BOOLEAN NOT NULL DEFAULT FALSE;
+  ADD COLUMN IF NOT EXISTS is_phone_public BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
 
 COMMENT ON COLUMN public.users.store_name IS 'Nama toko, restoran, katering, atau unit usaha sumber bahan pangan berlebih';
 COMMENT ON COLUMN public.users.phone IS 'Nomor kontak/WhatsApp resmi toko atau usaha seller';
 COMMENT ON COLUMN public.users.is_phone_public IS 'Izin publikasi nomor telepon seller kepada publik/pembeli terautentikasi (Zero-Trust Privacy)';
+COMMENT ON COLUMN public.users.updated_at IS 'Waktu terakhir pembaruan profil pengguna atau toko';
 
--- 2. Penambahan Kolom Karakteristik Bahan Pakan Ternak pada Tabel public.foods
+-- ----------------------------------------------------------------------------
+-- 2. Kebijakan Row Level Security (RLS) pada Tabel public.users
+-- ----------------------------------------------------------------------------
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+-- Proteksi eskalasi hak akses: cegah manipulasi kolom role oleh pengguna
+REVOKE UPDATE (role) ON public.users FROM anon, authenticated, PUBLIC;
+
+-- Izinkan pengguna terautentikasi memperbarui profil miliknya sendiri (alamat, koordinat, toko, phone)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'users' AND policyname = 'users_update_own_profile'
+  ) THEN
+    CREATE POLICY users_update_own_profile ON public.users
+      FOR UPDATE
+      TO authenticated
+      USING (auth.uid() = id)
+      WITH CHECK (auth.uid() = id);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'users' AND policyname = 'users_read_own_profile'
+  ) THEN
+    CREATE POLICY users_read_own_profile ON public.users
+      FOR SELECT
+      TO authenticated
+      USING (auth.uid() = id);
+  END IF;
+END $$;
+
+-- ----------------------------------------------------------------------------
+-- 3. Penambahan Kolom Karakteristik Bahan Pakan Ternak pada Tabel public.foods
+-- ----------------------------------------------------------------------------
 ALTER TABLE public.foods
   ADD COLUMN IF NOT EXISTS unit TEXT NOT NULL DEFAULT 'kg',
   ADD COLUMN IF NOT EXISTS condition TEXT NOT NULL DEFAULT 'layak',
@@ -46,8 +88,10 @@ COMMENT ON COLUMN public.foods.target_livestock IS 'Rekomendasi jenis ternak: Un
 COMMENT ON COLUMN public.foods.storage_instructions IS 'Petunjuk penanganan dan penyimpanan bahan agar tidak membusuk';
 COMMENT ON COLUMN public.foods.collected_at IS 'Waktu pengumpulan atau penyelesaian produksi bahan pangan berlebih';
 
--- 3. View Profil Publik Seller (Zero-Trust Data Protection)
--- Tanpa CASCADE agar tidak merusak objek dependent lain jika ada
+-- ----------------------------------------------------------------------------
+-- 4. View Profil Publik Seller (Zero-Trust Data Protection)
+-- ----------------------------------------------------------------------------
+-- Hapus tanpa CASCADE agar tidak merusak objek database dependen lain
 DROP VIEW IF EXISTS public.seller_public_profiles;
 
 CREATE OR REPLACE VIEW public.seller_public_profiles AS
@@ -75,7 +119,9 @@ WHERE u.role IN ('seller', 'admin');
 REVOKE ALL ON public.seller_public_profiles FROM PUBLIC;
 GRANT SELECT ON public.seller_public_profiles TO anon, authenticated;
 
--- 4. RPC Helper: Mengambil Profil Publik Seller Tunggal (Zero-Trust)
+-- ----------------------------------------------------------------------------
+-- 5. RPC Helper: Mengambil Profil Publik Seller Tunggal (Zero-Trust)
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.get_seller_public_profile(p_seller_id UUID)
 RETURNS JSONB
 LANGUAGE sql
@@ -109,7 +155,9 @@ $$;
 REVOKE ALL ON FUNCTION public.get_seller_public_profile(UUID) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_seller_public_profile(UUID) TO anon, authenticated;
 
--- 5. Kategori Awal Bahan Pakan Ternak (Food Waste to Animal Feed)
+-- ----------------------------------------------------------------------------
+-- 6. Kategori Awal Bahan Pakan Ternak (Food Waste to Animal Feed)
+-- ----------------------------------------------------------------------------
 -- Verifikasi keberadaan unique constraint pada categories.name sebelum ON CONFLICT (name)
 DO $$
 BEGIN
@@ -148,12 +196,21 @@ VALUES
   ('Limbah Organik Segar Lainnya')
 ON CONFLICT (name) DO NOTHING;
 
--- 6. Indeks Performa untuk Pencarian & Filter Lokasi
+-- ----------------------------------------------------------------------------
+-- 7. Indeks Performa untuk Pencarian & Filter Lokasi
+-- ----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_users_seller_coords 
   ON public.users (latitude, longitude) 
   WHERE role IN ('seller', 'admin');
 
 CREATE INDEX IF NOT EXISTS idx_foods_condition_target 
   ON public.foods (condition, target_livestock, status);
+
+-- ----------------------------------------------------------------------------
+-- 8. Muat Ulang Schema Cache PostgREST
+-- ----------------------------------------------------------------------------
+-- Menginstruksikan PostgREST untuk memuat ulang skema seketika,
+-- menyelesaikan error: "Could not find the 'xyz' column of 'users' in the schema cache".
+NOTIFY pgrst, 'reload schema';
 
 COMMIT;

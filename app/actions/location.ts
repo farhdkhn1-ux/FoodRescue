@@ -253,61 +253,70 @@ export async function getSellerPublicProfileAction(
       return { success: false, error: "ID seller tidak valid." };
     }
 
-    const authResult = await getAuthenticatedUserAndRole();
-    const currentUserId = authResult.status === "authenticated" ? authResult.user?.id : null;
-
     const supabase = await createClient();
 
-    // Query hanya kolom publik yang aman dari users
-    const { data, error } = await supabase
-      .from("users")
-      .select("id, store_name, address, latitude, longitude, phone, is_phone_public")
+    // Query profil publik melalui View seller_public_profiles (aman dari batasan RLS users)
+    const { data: viewData, error: viewError } = await supabase
+      .from("seller_public_profiles")
+      .select("id, store_name, address, latitude, longitude, phone, is_phone_public, is_location_complete")
       .eq("id", sellerId)
       .maybeSingle();
 
-    if (error || !data) {
+    if (!viewError && viewData) {
+      return {
+        success: true,
+        data: {
+          id: viewData.id,
+          store_name:
+            viewData.store_name || `Sumber Bahan #${viewData.id.slice(0, 8)}`,
+          address: viewData.address || null,
+          latitude:
+            viewData.latitude !== null && viewData.latitude !== undefined
+              ? Number(viewData.latitude)
+              : null,
+          longitude:
+            viewData.longitude !== null && viewData.longitude !== undefined
+              ? Number(viewData.longitude)
+              : null,
+          phone: viewData.phone || null,
+          is_phone_public: Boolean(viewData.is_phone_public),
+          is_location_complete: Boolean(viewData.is_location_complete),
+        },
+      };
+    }
+
+    // Fallback: RPC get_seller_public_profile
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
+      "get_seller_public_profile",
+      { p_seller_id: sellerId }
+    );
+
+    if (rpcError || !rpcData) {
       return {
         success: false,
         error: "Data profil penjual / sumber bahan tidak ditemukan.",
       };
     }
 
-    const storeName =
-      (data.store_name as string | undefined) ||
-      `Sumber Bahan #${data.id.slice(0, 8)}`;
-    const address = (data.address as string | undefined) || null;
-    const latitude =
-      data.latitude !== null && data.latitude !== undefined
-        ? Number(data.latitude)
-        : null;
-    const longitude =
-      data.longitude !== null && data.longitude !== undefined
-        ? Number(data.longitude)
-        : null;
-
-    const isPhonePublic = Boolean(data.is_phone_public);
-    // Zero-Trust Masking: hanya terbuka untuk caller terautentikasi jika seller set is_phone_public = true atau caller adalah seller itu sendiri
-    const rawPhone = (data.phone as string | undefined) || null;
-    const phone =
-      currentUserId && (isPhonePublic || currentUserId === data.id)
-        ? rawPhone
-        : null;
-
-    const isComplete = Boolean(
-      data.store_name && address && latitude !== null && longitude !== null
-    );
-
+    const raw = rpcData as unknown as SellerPublicProfile;
     return {
       success: true,
       data: {
-        id: data.id,
-        store_name: storeName,
-        address,
-        latitude,
-        longitude,
-        phone,
-        is_phone_public: isPhonePublic,
-        is_location_complete: isComplete,
+        id: raw.id,
+        store_name:
+          raw.store_name || `Sumber Bahan #${raw.id.slice(0, 8)}`,
+        address: raw.address || null,
+        latitude:
+          raw.latitude !== null && raw.latitude !== undefined
+            ? Number(raw.latitude)
+            : null,
+        longitude:
+          raw.longitude !== null && raw.longitude !== undefined
+            ? Number(raw.longitude)
+            : null,
+        phone: raw.phone || null,
+        is_phone_public: Boolean(raw.is_phone_public),
+        is_location_complete: Boolean(raw.is_location_complete),
       },
     };
   } catch (err) {

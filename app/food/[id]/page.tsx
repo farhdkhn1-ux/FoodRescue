@@ -72,47 +72,63 @@ export default async function FoodDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  // Ambil profil publik toko seller untuk titik penjemputan (Fitur Wajib W6)
-  const { data: sellerData } = await supabase
-    .from("users")
-    .select("id, store_name, address, latitude, longitude, phone, is_phone_public")
-    .eq("id", foodData.seller_id)
-    .maybeSingle();
+  // Ambil profil publik toko seller untuk titik penjemputan via seller_public_profiles View
+  // (atau RPC get_seller_public_profile) untuk menjamin data terbaca tanpa terhalang RLS public.users
+  let sellerProfile: SellerPublicProfile | null = null;
 
-  const isPhonePublic = Boolean(sellerData?.is_phone_public);
-  const isOwner =
-    authResult.status === "authenticated" && authResult.user?.id === sellerData?.id;
-  const isAuthenticated = authResult.status === "authenticated";
-  const maskedPhone =
-    isAuthenticated && (isPhonePublic || isOwner)
-      ? (sellerData?.phone as string | undefined) || null
-      : null;
+  if (foodData.seller_id) {
+    const { data: viewData, error: viewError } = await supabase
+      .from("seller_public_profiles")
+      .select("id, store_name, address, latitude, longitude, phone, is_phone_public, is_location_complete")
+      .eq("id", foodData.seller_id)
+      .maybeSingle();
 
-  const sellerProfile: SellerPublicProfile | null = sellerData
-    ? {
-        id: sellerData.id,
+    if (!viewError && viewData) {
+      sellerProfile = {
+        id: viewData.id,
         store_name:
-          (sellerData.store_name as string | undefined) ||
-          `Sumber Bahan #${sellerData.id.slice(0, 8)}`,
-        address: (sellerData.address as string | undefined) || null,
+          viewData.store_name || `Sumber Bahan #${viewData.id.slice(0, 8)}`,
+        address: viewData.address || null,
         latitude:
-          sellerData.latitude !== null && sellerData.latitude !== undefined
-            ? Number(sellerData.latitude)
+          viewData.latitude !== null && viewData.latitude !== undefined
+            ? Number(viewData.latitude)
             : null,
         longitude:
-          sellerData.longitude !== null && sellerData.longitude !== undefined
-            ? Number(sellerData.longitude)
+          viewData.longitude !== null && viewData.longitude !== undefined
+            ? Number(viewData.longitude)
             : null,
-        phone: maskedPhone,
-        is_phone_public: isPhonePublic,
-        is_location_complete: Boolean(
-          sellerData.store_name &&
-            sellerData.address &&
-            sellerData.latitude !== null &&
-            sellerData.longitude !== null
-        ),
+        phone: viewData.phone || null,
+        is_phone_public: Boolean(viewData.is_phone_public),
+        is_location_complete: Boolean(viewData.is_location_complete),
+      };
+    } else {
+      // Fallback: RPC get_seller_public_profile
+      const { data: rpcData } = await supabase.rpc("get_seller_public_profile", {
+        p_seller_id: foodData.seller_id,
+      });
+
+      if (rpcData && typeof rpcData === "object" && "id" in rpcData) {
+        const raw = rpcData as unknown as SellerPublicProfile;
+        sellerProfile = {
+          id: raw.id,
+          store_name:
+            raw.store_name || `Sumber Bahan #${raw.id.slice(0, 8)}`,
+          address: raw.address || null,
+          latitude:
+            raw.latitude !== null && raw.latitude !== undefined
+              ? Number(raw.latitude)
+              : null,
+          longitude:
+            raw.longitude !== null && raw.longitude !== undefined
+              ? Number(raw.longitude)
+              : null,
+          phone: raw.phone || null,
+          is_phone_public: Boolean(raw.is_phone_public),
+          is_location_complete: Boolean(raw.is_location_complete),
+        };
       }
-    : null;
+    }
+  }
 
   // Ambil data lokasi buyer jika sudah login (untuk perhitungan jarak penjemputan)
   let buyerLocation: UserLocationData | null = null;

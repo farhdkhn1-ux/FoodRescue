@@ -393,7 +393,7 @@ export async function getBuyerOrdersAction(): Promise<ActionResponse<Order[]>> {
 
     if (sellerIds.length > 0) {
       const { data: sellersData } = await supabase
-        .from("users")
+        .from("seller_public_profiles")
         .select("id, store_name, address, latitude, longitude, phone")
         .in("id", sellerIds);
 
